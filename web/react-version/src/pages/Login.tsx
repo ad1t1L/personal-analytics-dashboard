@@ -278,12 +278,7 @@ export default function Login() {
   }
 
   function onForgotPassword() {
-    const email = loginEmail.trim();
-    if (email) {
-      showToast("login", "success", "📧", `If ${email} is registered, a reset link will be sent.`);
-    } else {
-      showToast("login", "warn", "💡", 'Enter your email above, then click "Forgot password?"');
-    }
+    nav("/forgot-password");
   }
 
   async function onSignupSubmit(e: React.FormEvent) {
