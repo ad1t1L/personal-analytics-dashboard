@@ -55,10 +55,13 @@ def send_verification_email(to: str, name: str, token: str) -> None:
 
 def send_password_reset_email(to: str, name: str, token: str) -> None:
     """
-    Future use: sends a password-reset link using the same token mechanism.
-    (Implement the /auth/reset-password route when needed.)
+    Sends a password-reset link. The link points to the React frontend
+    /reset-password page which reads the token from the query string and
+    calls POST /auth/reset-password on submit.
     """
-    link = f"{APP_BASE_URL}/auth/reset-password?token={token}"
+    # Frontend runs on port 5173 in dev; use APP_BASE_URL for production.
+    frontend_url = APP_BASE_URL.replace(":8000", ":5173")
+    link = f"{frontend_url}/reset-password?token={token}"
     html = f"""
     <html><body>
       <p>Hi {name},</p>
@@ -66,6 +69,11 @@ def send_password_reset_email(to: str, name: str, token: str) -> None:
          (expires in 1 hour):</p>
       <p><a href="{link}">Reset my password</a></p>
       <p>If you didn't request this, ignore this email — your password won't change.</p>
+      <hr>
+      <p style="color:#888;font-size:12px;">
+        If the button doesn't work, copy and paste this URL into your browser:<br>
+        {link}
+      </p>
     </body></html>
     """
     _send(to, "Reset your password", html)

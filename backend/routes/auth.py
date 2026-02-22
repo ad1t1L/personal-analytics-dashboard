@@ -11,7 +11,7 @@ from pydantic import BaseModel, EmailStr, field_validator
 from sqlalchemy.orm import Session
 
 from backend.dependencies import get_db, get_current_user
-from backend.models import User, EmailVerificationToken, RefreshToken, Email2FACode
+from backend.models import User, EmailVerificationToken, RefreshToken, Email2FACode, PasswordResetToken
 from backend.security import (
     hash_password, verify_password,
     create_access_token,
@@ -20,8 +20,8 @@ from backend.security import (
     generate_totp_secret, verify_totp, get_totp_uri,
     create_2fa_pending_token, decode_2fa_pending_token,
 )
-from backend.email_utils import send_verification_email, send_2fa_code_email
-from backend.config import MIN_PASSWORD_LENGTH, VERIFICATION_TOKEN_EXPIRE_HOURS, EMAIL_2FA_CODE_EXPIRE_MINUTES
+from backend.email_utils import send_verification_email, send_2fa_code_email, send_password_reset_email
+from backend.config import MIN_PASSWORD_LENGTH, VERIFICATION_TOKEN_EXPIRE_HOURS, EMAIL_2FA_CODE_EXPIRE_MINUTES, PASSWORD_RESET_TOKEN_EXPIRE_HOURS
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -475,3 +475,93 @@ def disable_email_2fa(
     db.query(Email2FACode).filter(Email2FACode.user_id == user.id).delete()
     db.commit()
     return {"message": "Email 2FA has been disabled."}
+
+
+# ── Forgot password ───────────────────────────────────────────────────────────
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+@router.post("/forgot-password")
+def forgot_password(body: ForgotPasswordRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
+    """
+    Always returns the same success message regardless of whether the email
+    exists — this prevents user enumeration (attackers can't probe which
+    accounts exist by watching different responses).
+    """
+    email = str(body.email).lower().strip()
+    user  = db.query(User).filter(User.email == email).first()
+
+    if user and bool(user.is_active):
+        # Invalidate any existing unused reset tokens for this user
+        db.query(PasswordResetToken).filter(
+            PasswordResetToken.user_id == user.id,
+            PasswordResetToken.used    == False,
+        ).delete()
+
+        raw_token = generate_verification_token()
+        db.add(PasswordResetToken(
+            user_id    = user.id,
+            token      = raw_token,
+            expires_at = datetime.now(timezone.utc) + timedelta(hours=PASSWORD_RESET_TOKEN_EXPIRE_HOURS),
+        ))
+        db.commit()
+
+        try:
+            send_password_reset_email(to=email, name=str(user.name), token=raw_token)
+        except Exception:
+            pass
+
+    return {"message": "If that email is registered, a password reset link has been sent."}
+
+
+# ── Reset password ────────────────────────────────────────────────────────────
+
+class ResetPasswordRequest(BaseModel):
+    token:    str
+    password: str
+
+    @field_validator("password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
+        if len(v) < MIN_PASSWORD_LENGTH:
+            raise ValueError(f"Password must be at least {MIN_PASSWORD_LENGTH} characters")
+        if not any(c.isupper() for c in v):
+            raise ValueError("Password must contain at least one uppercase letter")
+        if not any(c.isdigit() for c in v):
+            raise ValueError("Password must contain at least one number")
+        return v
+
+
+@router.post("/reset-password")
+def reset_password(body: ResetPasswordRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
+    token_row = (
+        db.query(PasswordResetToken)
+        .filter(
+            PasswordResetToken.token == body.token,
+            PasswordResetToken.used  == False,
+        )
+        .first()
+    )
+
+    if not token_row:
+        raise HTTPException(status_code=400, detail="Invalid or already used reset link.")
+
+    # Compare naive datetimes (DB stores naive UTC)
+    expires = token_row.expires_at
+    now     = datetime.now(timezone.utc).replace(tzinfo=None)
+    if expires < now:
+        db.delete(token_row)
+        db.commit()
+        raise HTTPException(status_code=400, detail="Reset link has expired. Please request a new one.")
+
+    user = token_row.user
+    user.password_hash = hash_password(body.password)
+
+    # Mark token used and revoke all refresh tokens (force re-login everywhere)
+    token_row.used = True
+    db.query(RefreshToken).filter(RefreshToken.user_id == user.id).update({"revoked": True})
+
+    db.commit()
+    return {"message": "Password reset successfully. You can now log in with your new password."}
