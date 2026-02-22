@@ -265,7 +265,14 @@ export default function Dashboard() {
             {twoFASetup && (
               <div>
                 <p>Scan this QR code with your authenticator app, then enter the 6-digit code below.</p>
-                <img src={`data:image/png;base64,${twoFASetup.qr_base64}`} alt="2FA QR" style={{ display: "block", margin: "12px 0", width: 180, height: 180 }} />
+                <img
+                  src={`data:image/png;base64,${String(twoFASetup.qr_base64).replace(/\s/g, "")}`}
+                  alt="2FA QR - scan with authenticator app"
+                  style={{ display: "block", margin: "12px 0", width: 180, height: 180, border: "1px solid #444" }}
+                />
+                <p style={{ fontSize: "0.85rem", color: "#888", marginTop: 8 }}>
+                  Can&apos;t scan? Enter this secret manually in your app: <code style={{ userSelect: "all", padding: "2px 6px", background: "#222" }}>{twoFASetup.secret}</code>
+                </p>
                 <input
                   type="text"
                   inputMode="numeric"
