@@ -1,6 +1,17 @@
 import os
 
-DATABASE_URL = "sqlite:///database/app.db"
+from dotenv import load_dotenv
+load_dotenv()
+
+# Local dev: use SQLite by default. Set USE_SQLITE=1 to force SQLite even if
+# DATABASE_URL is set in .env. For production, set DATABASE_URL to MySQL.
+# MySQL example: mysql+pymysql://user:password@localhost:3306/dbname
+USE_SQLITE = os.environ.get("USE_SQLITE", "").lower() in ("1", "true")
+DATABASE_URL = (
+    "sqlite:///database/app.db"
+    if USE_SQLITE
+    else os.environ.get("DATABASE_URL", "sqlite:///database/app.db")
+)
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "CHANGE_ME_BEFORE_DEPLOY")
 
@@ -26,3 +37,6 @@ MIN_PASSWORD_LENGTH = 8
 # ── Rate limiting ─────────────────────────────────────────────────────────────
 MAX_LOGIN_ATTEMPTS = 5
 LOCKOUT_MINUTES    = 15
+
+# ── Email 2FA code expiry (minutes) ───────────────────────────────────────────
+EMAIL_2FA_CODE_EXPIRE_MINUTES = 10

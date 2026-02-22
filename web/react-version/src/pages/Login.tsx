@@ -77,6 +77,15 @@ export default function Login() {
   const [lockUntil, setLockUntil] = useState<number>(0);
   const [lockLeft, setLockLeft] = useState<number>(30);
 
+  // 2FA step (after password login when 2FA is enabled)
+  const [show2FAStep, setShow2FAStep] = useState(false);
+  const [pending2FA, setPending2FA] = useState("");
+  const [twoFACode, setTwoFACode] = useState("");
+  const [twoFALoading, setTwoFALoading] = useState(false);
+  const [twoFAError, setTwoFAError] = useState("");
+  const [emailCodeSent, setEmailCodeSent] = useState(false);
+  const [sendEmailLoading, setSendEmailLoading] = useState(false);
+
   // Strength meter
   const [strength, setStrength] = useState<StrengthState>({
     show: false,
@@ -248,6 +257,16 @@ export default function Login() {
         return;
       }
 
+      // 2FA required: show code step instead of finishing login
+      if (data.token_type === "2fa_pending" && data.refresh_token) {
+        setFailCount(0);
+        setPending2FA(data.refresh_token);
+        setLoginEmail(email);
+        setShow2FAStep(true);
+        setLoginLoading(false);
+        return;
+      }
+
       // Success — store tokens
       setFailCount(0);
       sessionStorage.setItem("access_token", data.access_token);
@@ -274,6 +293,72 @@ export default function Login() {
       showToast("login", "error", "❌", "Could not connect to server. Is the backend running?");
     } finally {
       setLoginLoading(false);
+    }
+  }
+
+  async function onSendEmailCode() {
+    if (!pending2FA) return;
+    setTwoFAError("");
+    setSendEmailLoading(true);
+    try {
+      const res = await fetch(`${API}/auth/2fa/send-email-code`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pending_2fa_token: pending2FA }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setTwoFAError(data.detail || "Could not send code. Use your app or try again.");
+        return;
+      }
+      setEmailCodeSent(true);
+    } catch {
+      setTwoFAError("Could not send code. Try again.");
+    } finally {
+      setSendEmailLoading(false);
+    }
+  }
+
+  async function on2FASubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setTwoFAError("");
+    const code = twoFACode.replace(/\s/g, "");
+    if (code.length !== 6) {
+      setTwoFAError("Enter the 6-digit code from your authenticator app.");
+      return;
+    }
+    setTwoFALoading(true);
+    try {
+      const res = await fetch(`${API}/auth/login/2fa`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pending_2fa_token: pending2FA, code }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setTwoFAError(data.detail || "Invalid code. Try again.");
+        return;
+      }
+      const email = loginEmail.trim();
+      sessionStorage.setItem("access_token", data.access_token);
+      sessionStorage.setItem("refresh_token", data.refresh_token);
+      const session = { email, loginTime: new Date().toISOString() };
+      sessionStorage.setItem("planner_session", JSON.stringify(session));
+      if (rememberMe) {
+        localStorage.setItem("access_token", data.access_token);
+        localStorage.setItem("refresh_token", data.refresh_token);
+        localStorage.setItem("planner_session", JSON.stringify(session));
+      } else {
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("refresh_token");
+        localStorage.removeItem("planner_session");
+      }
+      setLoginSuccess(true);
+      setTimeout(() => nav("/dashboard", { replace: true }), 1800);
+    } catch {
+      setTwoFAError("Could not connect. Try again.");
+    } finally {
+      setTwoFALoading(false);
     }
   }
 
@@ -453,7 +538,60 @@ export default function Login() {
           </div>
 
           {/* LOGIN */}
-          {tab === "login" && !loginSuccess && (
+          {tab === "login" && !loginSuccess && (show2FAStep ? (
+            <div id="panel-2fa">
+              <div className="form-title">Two-factor authentication</div>
+              <div className="form-sub">Enter the 6-digit code from your authenticator app, or request one by email</div>
+              {twoFAError && <div className="field-error" style={{ marginBottom: 12 }}>{twoFAError}</div>}
+              {emailCodeSent && <div className="toast success show" style={{ marginBottom: 12 }}><span className="toast-icon">📧</span><span>Code sent to your email. Enter it below.</span></div>}
+              <form noValidate onSubmit={on2FASubmit}>
+                <div className="field">
+                  <label htmlFor="2fa-code">Verification code</label>
+                  <div className="input-wrap">
+                    <span className="icon">🔐</span>
+                    <input
+                      id="2fa-code"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      placeholder="000000"
+                      maxLength={6}
+                      value={twoFACode}
+                      onChange={(e) => setTwoFACode(e.target.value.replace(/\D/g, ""))}
+                      disabled={twoFALoading}
+                    />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="link-btn"
+                  onClick={onSendEmailCode}
+                  disabled={twoFALoading || sendEmailLoading}
+                  style={{ display: "block", marginBottom: 12 }}
+                >
+                  {sendEmailLoading ? "Sending…" : "📧 Send code to my email"}
+                </button>
+                <div className="row-between" style={{ marginTop: 16 }}>
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={() => { setShow2FAStep(false); setPending2FA(""); setTwoFACode(""); setTwoFAError(""); setEmailCodeSent(false); }}
+                    disabled={twoFALoading}
+                  >
+                    ← Back to sign in
+                  </button>
+                  <button
+                    type="submit"
+                    className="submit-btn"
+                    disabled={twoFALoading || twoFACode.length !== 6}
+                    style={{ flex: "0 0 auto" }}
+                  >
+                    {twoFALoading ? "Verifying…" : "Verify"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          ) : (
             <div id="panel-login">
               <div className="form-title">Welcome back 👋</div>
               <div className="form-sub">Sign in to your PlannerHub dashboard</div>
@@ -549,7 +687,7 @@ export default function Login() {
                 </button>
               </div>
             </div>
-          )}
+          ))}
 
           {/* LOGIN SUCCESS */}
           {tab === "login" && loginSuccess && (

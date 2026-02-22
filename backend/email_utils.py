@@ -69,3 +69,19 @@ def send_password_reset_email(to: str, name: str, token: str) -> None:
     </body></html>
     """
     _send(to, "Reset your password", html)
+
+
+def send_2fa_code_email(to: str, name: str, code: str) -> None:
+    """
+    Sends a 6-digit 2FA code to the user's email (login or backup 2FA option).
+    Same SMTP setup as verification and password reset in this file.
+    """
+    html = f"""
+    <html><body>
+      <p>Hi {name},</p>
+      <p>Your PlannerHub login verification code is:</p>
+      <p style="font-size:24px;font-weight:bold;letter-spacing:4px;">{code}</p>
+      <p>This code expires in 10 minutes. If you didn't request it, you can ignore this email.</p>
+    </body></html>
+    """
+    _send(to, "Your login verification code", html)

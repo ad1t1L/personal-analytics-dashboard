@@ -14,7 +14,10 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT    NOT NULL,          -- bcrypt hash, never plain text
     is_verified   BOOLEAN NOT NULL DEFAULT 0,-- 0 until email link is clicked
     is_active     BOOLEAN NOT NULL DEFAULT 1,-- set to 0 to soft-disable account
-    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+    totp_secret        VARCHAR(32),               -- base32 TOTP secret for 2FA
+    totp_enabled       BOOLEAN NOT NULL DEFAULT 0,-- 1 when user verified first code
+    email_2fa_enabled  BOOLEAN NOT NULL DEFAULT 0,-- 1 = can request code at login
+    created_at         DATETIME DEFAULT CURRENT_TIMESTAMP,
     last_login    DATETIME
 );
 CREATE INDEX IF NOT EXISTS ix_users_email ON users (email);
@@ -48,6 +51,18 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
 );
 CREATE INDEX IF NOT EXISTS ix_refresh_tokens_token_hash
     ON refresh_tokens (token_hash);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- EMAIL 2FA CODES (one-time codes sent to email at login)
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS email_2fa_codes (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER  NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    code       TEXT     NOT NULL,
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS ix_email_2fa_codes_user_id ON email_2fa_codes (user_id);
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- TASKS

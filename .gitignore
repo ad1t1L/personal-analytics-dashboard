@@ -1,3 +1,7 @@
+# Env (keep secrets out of git)
+.env
+.env.local
+
 # Python
 __pycache__/
 *.pyc
