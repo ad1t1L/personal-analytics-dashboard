@@ -27,6 +27,7 @@ class User(Base):
     feedback_entries    : Mapped[list["Feedback"]]               = relationship(back_populates="owner", cascade="all, delete-orphan")
     verification_tokens : Mapped[list["EmailVerificationToken"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     refresh_tokens      : Mapped[list["RefreshToken"]]           = relationship(back_populates="user", cascade="all, delete-orphan")
+    password_reset_tokens : Mapped[list["PasswordResetToken"]]   = relationship(back_populates="user", cascade="all, delete-orphan")
 
 
 class EmailVerificationToken(Base):
@@ -52,6 +53,19 @@ class RefreshToken(Base):
     revoked    : Mapped[bool]     = mapped_column(Boolean, default=False, nullable=False)
 
     user: Mapped["User"] = relationship(back_populates="refresh_tokens")
+
+
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id         : Mapped[int]      = mapped_column(Integer, primary_key=True, index=True)
+    user_id    : Mapped[int]      = mapped_column(ForeignKey("users.id"), nullable=False)
+    token      : Mapped[str]      = mapped_column(String, unique=True, nullable=False, index=True)
+    expires_at : Mapped[datetime] = mapped_column(nullable=False)
+    created_at : Mapped[datetime] = mapped_column(default=utcnow)
+    used       : Mapped[bool]     = mapped_column(Boolean, default=False, nullable=False)
+
+    user: Mapped["User"] = relationship(back_populates="password_reset_tokens")
 
 
 # ── App models ────────────────────────────────────────────────────────────────
