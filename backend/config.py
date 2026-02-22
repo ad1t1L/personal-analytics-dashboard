@@ -22,6 +22,9 @@ REFRESH_TOKEN_EXPIRE_DAYS    = 30
 # ── Email verification ────────────────────────────────────────────────────────
 VERIFICATION_TOKEN_EXPIRE_HOURS = 24
 
+# ── Password reset ────────────────────────────────────────────────────────────
+PASSWORD_RESET_TOKEN_EXPIRE_HOURS = 1
+
 # ── Email (SMTP) settings ─────────────────────────────────────────────────────
 SMTP_HOST     = os.environ.get("SMTP_HOST",     "smtp.gmail.com")
 SMTP_PORT     = int(os.environ.get("SMTP_PORT", "587"))
