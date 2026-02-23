@@ -566,7 +566,15 @@ export default function Login() {
                 >
                   {sendEmailLoading ? "Sending…" : "📧 Send code to my email"}
                 </button>
-                <div className="row-between" style={{ marginTop: 16 }}>
+                <button
+                  type="submit"
+                  className="submit-btn"
+                  disabled={twoFALoading || twoFACode.length !== 6}
+                  style={{ marginTop: 16 }}
+                >
+                  {twoFALoading ? "Verifying…" : "Verify"}
+                </button>
+                <div style={{ textAlign: "center", marginTop: 14 }}>
                   <button
                     type="button"
                     className="link-btn"
@@ -574,14 +582,6 @@ export default function Login() {
                     disabled={twoFALoading}
                   >
                     ← Back to sign in
-                  </button>
-                  <button
-                    type="submit"
-                    className="submit-btn"
-                    disabled={twoFALoading || twoFACode.length !== 6}
-                    style={{ flex: "0 0 auto" }}
-                  >
-                    {twoFALoading ? "Verifying…" : "Verify"}
                   </button>
                 </div>
               </form>

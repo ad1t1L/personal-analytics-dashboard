@@ -53,7 +53,7 @@
     background-size: 40px 40px;
     pointer-events: none;
 }
-.brand {
+.left-panel .brand {
     position: relative;
     display: flex;
     align-items: center;

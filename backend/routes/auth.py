@@ -565,3 +565,42 @@ def reset_password(body: ResetPasswordRequest, db: Session = Depends(get_db)) ->
 
     db.commit()
     return {"message": "Password reset successfully. You can now log in with your new password."}
+
+
+# ── Change password (authenticated) ──────────────────────────────────────────
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
+        if len(v) < MIN_PASSWORD_LENGTH:
+            raise ValueError(f"Password must be at least {MIN_PASSWORD_LENGTH} characters")
+        if not any(c.isupper() for c in v):
+            raise ValueError("Password must contain at least one uppercase letter")
+        if not any(c.isdigit() for c in v):
+            raise ValueError("Password must contain at least one number")
+        return v
+
+
+@router.post("/change-password")
+def change_password(
+    body: ChangePasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Change password for the currently authenticated user."""
+    if not verify_password(body.current_password, str(current_user.password_hash)):
+        raise HTTPException(status_code=400, detail="Current password is incorrect.")
+
+    current_user.password_hash = hash_password(body.new_password)
+
+    # Revoke all refresh tokens so other sessions are logged out
+    db.query(RefreshToken).filter(
+        RefreshToken.user_id == current_user.id
+    ).update({"revoked": True})
+
+    db.commit()
+    return {"message": "Password changed successfully."}
