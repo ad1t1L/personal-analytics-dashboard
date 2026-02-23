@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+
 
 const API = "http://localhost:8000";
 
@@ -46,8 +47,6 @@ export default function Dashboard() {
   const [deadline, setDeadline] = useState<string>("");
   const [importance, setImportance] = useState<number>(3);
   const [creating, setCreating] = useState(false);
-
-  const token = useMemo(() => sessionStorage.getItem("access_token"), []);
 
   // 2FA state
   const [totpEnabled, setTotpEnabled] = useState<boolean | null>(null);
@@ -339,8 +338,11 @@ export default function Dashboard() {
     <>
       <header>
         <div className="brand">📋 PlannerHub</div>
-        <div className="user-info">
+          <div className="user-info" style={{ display: "flex", gap: 12, alignItems: "center" }}>
           <span>{`👋 Welcome, ${session.email ?? "User"}`}</span>
+          <button className="ghost-btn" type="button" onClick={() => nav("/account")}>
+            Account
+          </button>
           <button className="signout-btn" onClick={signOut}>
             Sign Out
           </button>

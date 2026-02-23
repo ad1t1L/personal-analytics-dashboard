@@ -3,6 +3,7 @@ import Login from "./pages/Login.tsx";
 import Dashboard from "./pages/Dashboard.tsx";
 import ForgotPassword from "./pages/ForgotPassword.tsx";
 import ResetPassword from "./pages/ResetPassword.tsx";
+import Account from "./pages/Account.tsx";
 
 function hasSession() {
   // Check for real JWT token instead of fake session object
@@ -29,6 +30,7 @@ export default function App() {
         }
       />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/account" element={<Account />} />
     </Routes>
   );
 }
