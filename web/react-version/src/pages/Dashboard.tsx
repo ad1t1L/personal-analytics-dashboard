@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-
 
 const API = "http://localhost:8000";
 
-type Session = { email?: string; loginTime?: string };
+type Session = { email?: string; loginTime?: string; name?: string };
 
 type Task = {
   id: number;
@@ -24,6 +23,14 @@ function importanceLabel(n: number) {
   return "Very low";
 }
 
+function importanceDot(n: number) {
+  if (n >= 5) return "#ff6b6b";
+  if (n === 4) return "#ffa94d";
+  if (n === 3) return "#ffd43b";
+  if (n === 2) return "#74c0fc";
+  return "#6b7083";
+}
+
 function getAuthHeaders(): HeadersInit {
   const token = sessionStorage.getItem("access_token");
   return {
@@ -32,40 +39,50 @@ function getAuthHeaders(): HeadersInit {
   };
 }
 
+function getDaysInMonth(year: number, month: number) {
+  return new Date(year, month + 1, 0).getDate();
+}
+
+function getFirstDayOfMonth(year: number, month: number) {
+  return new Date(year, month, 1).getDay();
+}
+
+const MONTH_NAMES = [
+  "January","February","March","April","May","June",
+  "July","August","September","October","November","December"
+];
+
 export default function Dashboard() {
   const nav = useNavigate();
-
   const [session, setSession] = useState<Session | null>(null);
-
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
-  // Create task form state
+  // 2FA banner
+  const [totpEnabled, setTotpEnabled] = useState<boolean | null>(null);
+  const [email2FAEnabled, setEmail2FAEnabled] = useState<boolean | null>(null);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  // Add task modal
+  const [showAddModal, setShowAddModal] = useState(false);
   const [title, setTitle] = useState("");
   const [duration, setDuration] = useState<number>(30);
   const [deadline, setDeadline] = useState<string>("");
   const [importance, setImportance] = useState<number>(3);
   const [creating, setCreating] = useState(false);
+  const [createErr, setCreateErr] = useState<string | null>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
 
-  // 2FA state
-  const [totpEnabled, setTotpEnabled] = useState<boolean | null>(null);
-  const [email2FAEnabled, setEmail2FAEnabled] = useState<boolean | null>(null);
-  const [twoFASetup, setTwoFASetup] = useState<{ qr_base64: string; secret: string } | null>(null);
-  const [twoFASetupCode, setTwoFASetupCode] = useState("");
-  const [twoFADisableCode, setTwoFADisableCode] = useState("");
-  const [twoFAMessage, setTwoFAMessage] = useState<{ type: "ok" | "err"; text: string } | null>(null);
-  const [twoFALoading, setTwoFALoading] = useState(false);
+  // Calendar
+  const today = new Date();
+  const [calYear, setCalYear] = useState(today.getFullYear());
+  const [calMonth, setCalMonth] = useState(today.getMonth());
 
   useEffect(() => {
     const raw = sessionStorage.getItem("planner_session");
     const t = sessionStorage.getItem("access_token");
-
-    if (!raw || !t) {
-      nav("/login", { replace: true });
-      return;
-    }
-
+    if (!raw || !t) { nav("/login", { replace: true }); return; }
     try {
       setSession(JSON.parse(raw));
     } catch {
@@ -76,25 +93,11 @@ export default function Dashboard() {
 
   async function fetchTasks() {
     const t = sessionStorage.getItem("access_token");
-    if (!t) {
-      nav("/login", { replace: true });
-      return;
-    }
-
-    setLoading(true);
-    setErr(null);
-
+    if (!t) { nav("/login", { replace: true }); return; }
+    setLoading(true); setErr(null);
     try {
-      const res = await fetch(`${API}/tasks/`, {
-        headers: { Authorization: `Bearer ${t}` },
-      });
-
-      if (res.status === 401) {
-        sessionStorage.clear();
-        nav("/login", { replace: true });
-        return;
-      }
-
+      const res = await fetch(`${API}/tasks/`, { headers: { Authorization: `Bearer ${t}` } });
+      if (res.status === 401) { sessionStorage.clear(); nav("/login", { replace: true }); return; }
       const data = await res.json();
       setTasks(Array.isArray(data.tasks) ? data.tasks : []);
     } catch {
@@ -104,92 +107,7 @@ export default function Dashboard() {
     }
   }
 
-  useEffect(() => {
-    if (!session) return;
-    fetchTasks();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session]);
-
-  async function createTask(e: React.FormEvent) {
-    e.preventDefault();
-    const t = sessionStorage.getItem("access_token");
-    if (!t) return nav("/login", { replace: true });
-
-    const cleanTitle = title.trim();
-    if (!cleanTitle) return;
-
-    setCreating(true);
-    setErr(null);
-
-    try {
-      const res = await fetch(`${API}/tasks/`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${t}`,
-        },
-        body: JSON.stringify({
-          title: cleanTitle,
-          duration_minutes: duration,
-          deadline: deadline ? deadline : null,
-          importance,
-        }),
-      });
-
-      if (res.status === 401) {
-        sessionStorage.clear();
-        nav("/login", { replace: true });
-        return;
-      }
-
-      if (!res.ok) {
-        const msg = await res.text();
-        setErr(msg || "Failed to create task.");
-        return;
-      }
-
-      setTitle("");
-      setDuration(30);
-      setDeadline("");
-      setImportance(3);
-
-      await fetchTasks();
-    } catch {
-      setErr("Failed to create task. Is the backend running?");
-    } finally {
-      setCreating(false);
-    }
-  }
-
-  async function deleteTask(id: number) {
-    const t = sessionStorage.getItem("access_token");
-    if (!t) return nav("/login", { replace: true });
-
-    // Optimistic UI (feels snappy)
-    const prev = tasks;
-    setTasks((x) => x.filter((t) => t.id !== id));
-
-    try {
-      const res = await fetch(`${API}/tasks/${id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${t}` },
-      });
-
-      if (res.status === 401) {
-        sessionStorage.clear();
-        nav("/login", { replace: true });
-        return;
-      }
-
-      if (!res.ok) {
-        setTasks(prev); // rollback
-        setErr("Could not delete task.");
-      }
-    } catch {
-      setTasks(prev); // rollback
-      setErr("Could not delete task. Is the backend running?");
-    }
-  }
+  useEffect(() => { if (session) fetchTasks(); }, [session]);
 
   const fetch2FAStatus = useCallback(async () => {
     const token = sessionStorage.getItem("access_token");
@@ -207,114 +125,75 @@ export default function Dashboard() {
     }
   }, []);
 
+  useEffect(() => { if (session) fetch2FAStatus(); }, [session, fetch2FAStatus]);
+
+  // Close modal on outside click
   useEffect(() => {
-    if (session) fetch2FAStatus();
-  }, [session, fetch2FAStatus]);
-
-  async function start2FASetup() {
-    setTwoFAMessage(null);
-    setTwoFALoading(true);
-    try {
-      const res = await fetch(`${API}/auth/2fa/setup`, { method: "POST", headers: getAuthHeaders() });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Setup failed");
-      setTwoFASetup({ qr_base64: data.qr_base64, secret: data.secret });
-      setTwoFASetupCode("");
-    } catch (e) {
-      setTwoFAMessage({ type: "err", text: e instanceof Error ? e.message : "Setup failed" });
-    } finally {
-      setTwoFALoading(false);
+    if (!showAddModal) return;
+    function handleClick(e: MouseEvent) {
+      if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
+        setShowAddModal(false);
+      }
     }
-  }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showAddModal]);
 
-  async function confirm2FASetup() {
-    const code = twoFASetupCode.replace(/\D/g, "");
-    if (code.length !== 6) {
-      setTwoFAMessage({ type: "err", text: "Enter the 6-digit code from your app." });
-      return;
+  // Close modal on Escape
+  useEffect(() => {
+    if (!showAddModal) return;
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setShowAddModal(false);
     }
-    setTwoFALoading(true);
-    setTwoFAMessage(null);
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [showAddModal]);
+
+  async function createTask(e: React.FormEvent) {
+    e.preventDefault();
+    const t = sessionStorage.getItem("access_token");
+    if (!t) return nav("/login", { replace: true });
+    const cleanTitle = title.trim();
+    if (!cleanTitle) return;
+    setCreating(true); setCreateErr(null);
     try {
-      const res = await fetch(`${API}/auth/2fa/verify`, {
+      const res = await fetch(`${API}/tasks/`, {
         method: "POST",
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ code }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` },
+        body: JSON.stringify({ title: cleanTitle, duration_minutes: duration, deadline: deadline || null, importance }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Verification failed");
-      setTwoFAMessage({ type: "ok", text: "2FA is now enabled." });
-      setTwoFASetup(null);
-      setTwoFASetupCode("");
-      setTotpEnabled(true);
-    } catch (e) {
-      setTwoFAMessage({ type: "err", text: e instanceof Error ? e.message : "Invalid code." });
+      if (res.status === 401) { sessionStorage.clear(); nav("/login", { replace: true }); return; }
+      if (!res.ok) { const msg = await res.text(); setCreateErr(msg || "Failed to create task."); return; }
+      setTitle(""); setDuration(30); setDeadline(""); setImportance(3);
+      setShowAddModal(false);
+      await fetchTasks();
+    } catch {
+      setCreateErr("Failed to create task. Is the backend running?");
     } finally {
-      setTwoFALoading(false);
+      setCreating(false);
     }
   }
 
-  async function disable2FA() {
-    const code = twoFADisableCode.replace(/\D/g, "");
-    if (code.length !== 6) {
-      setTwoFAMessage({ type: "err", text: "Enter your current 6-digit code." });
-      return;
-    }
-    setTwoFALoading(true);
-    setTwoFAMessage(null);
+  async function deleteTask(id: number) {
+    const t = sessionStorage.getItem("access_token");
+    if (!t) return nav("/login", { replace: true });
+    const prev = tasks;
+    setTasks((x) => x.filter((task) => task.id !== id));
     try {
-      const res = await fetch(`${API}/auth/2fa/disable`, {
-        method: "POST",
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ code }),
+      const res = await fetch(`${API}/tasks/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${t}` },
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Disable failed");
-      setTwoFAMessage({ type: "ok", text: "Authenticator 2FA has been disabled." });
-      setTwoFADisableCode("");
-      setTotpEnabled(false);
-    } catch (e) {
-      setTwoFAMessage({ type: "err", text: e instanceof Error ? e.message : "Invalid code." });
-    } finally {
-      setTwoFALoading(false);
-    }
-  }
-
-  async function enableEmail2FA() {
-    setTwoFALoading(true);
-    setTwoFAMessage(null);
-    try {
-      const res = await fetch(`${API}/auth/2fa/enable-email`, { method: "POST", headers: getAuthHeaders() });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Enable failed");
-      setTwoFAMessage({ type: "ok", text: "Email 2FA is now enabled. You can request a code at login." });
-      setEmail2FAEnabled(true);
-    } catch (e) {
-      setTwoFAMessage({ type: "err", text: e instanceof Error ? e.message : "Enable failed" });
-    } finally {
-      setTwoFALoading(false);
-    }
-  }
-
-  async function disableEmail2FA() {
-    setTwoFALoading(true);
-    setTwoFAMessage(null);
-    try {
-      const res = await fetch(`${API}/auth/2fa/disable-email`, { method: "POST", headers: getAuthHeaders() });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Disable failed");
-      setTwoFAMessage({ type: "ok", text: "Email 2FA has been disabled." });
-      setEmail2FAEnabled(false);
-    } catch (e) {
-      setTwoFAMessage({ type: "err", text: e instanceof Error ? e.message : "Disable failed" });
-    } finally {
-      setTwoFALoading(false);
+      if (res.status === 401) { sessionStorage.clear(); nav("/login", { replace: true }); return; }
+      if (!res.ok) { setTasks(prev); setErr("Could not delete task."); }
+    } catch {
+      setTasks(prev);
+      setErr("Could not delete task. Is the backend running?");
     }
   }
 
   async function signOut() {
     const refreshToken = sessionStorage.getItem("refresh_token");
-
     if (refreshToken) {
       try {
         await fetch(`${API}/auth/logout`, {
@@ -322,245 +201,268 @@ export default function Dashboard() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ refresh_token: refreshToken }),
         });
-      } catch {
-        // ignore
-      }
+      } catch {}
     }
-
-    sessionStorage.clear();
-    localStorage.clear();
+    sessionStorage.clear(); localStorage.clear();
     nav("/login", { replace: true });
   }
 
   if (!session) return null;
 
+  const profileRaw = localStorage.getItem("planner_profile");
+  const profile = profileRaw ? JSON.parse(profileRaw) : null;
+  const displayName = profile?.fullName?.trim() || session.email?.split("@")[0] || "User";
+
+  const show2FABanner = !bannerDismissed && totpEnabled === false && email2FAEnabled === false;
+
+  // Calendar helpers
+  const daysInMonth = getDaysInMonth(calYear, calMonth);
+  const firstDay = getFirstDayOfMonth(calYear, calMonth);
+  const calDays: (number | null)[] = [];
+  for (let i = 0; i < firstDay; i++) calDays.push(null);
+  for (let d = 1; d <= daysInMonth; d++) calDays.push(d);
+
+  function tasksForDay(day: number): Task[] {
+    const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    return tasks.filter((t) => t.deadline === dateStr);
+  }
+
+  function prevMonth() {
+    if (calMonth === 0) { setCalYear(y => y - 1); setCalMonth(11); }
+    else setCalMonth(m => m - 1);
+  }
+  function nextMonth() {
+    if (calMonth === 11) { setCalYear(y => y + 1); setCalMonth(0); }
+    else setCalMonth(m => m + 1);
+  }
+
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const upcomingTasks = [...tasks]
+    .filter(t => t.deadline && t.deadline >= todayStr)
+    .sort((a, b) => (a.deadline ?? "").localeCompare(b.deadline ?? ""));
+  const noDeadlineTasks = tasks.filter(t => !t.deadline);
+
   return (
     <>
       <header>
         <div className="brand">📋 PlannerHub</div>
-          <div className="user-info" style={{ display: "flex", gap: 12, alignItems: "center" }}>
-          <span>{`👋 Welcome, ${session.email ?? "User"}`}</span>
-          <button className="ghost-btn" type="button" onClick={() => nav("/account")}>
-            Account
-          </button>
-          <button className="signout-btn" onClick={signOut}>
-            Sign Out
-          </button>
+        <div className="user-info">
+          <span className="header-greeting">👋 {displayName}</span>
+          <button className="ghost-btn" type="button" onClick={() => nav("/account")}>Account</button>
+          <button className="signout-btn" onClick={signOut}>Sign Out</button>
         </div>
       </header>
 
+      {/* 2FA Banner */}
+      {show2FABanner && (
+        <div className="twofa-banner">
+          <div className="twofa-banner-content">
+            <span className="twofa-banner-icon">🔐</span>
+            <div>
+              <strong>Secure your account</strong>
+              <span className="twofa-banner-text"> — Two-factor authentication is not enabled. Enable it in your </span>
+              <button className="twofa-banner-link" onClick={() => nav("/account")}>Account settings</button>.
+            </div>
+          </div>
+          <button className="twofa-banner-dismiss" onClick={() => setBannerDismissed(true)} aria-label="Dismiss">✕</button>
+        </div>
+      )}
+
       <main className="dash">
         <aside className="sidebar">
-          <div className="side-title">TASK</div>
-
-          <button className="side-pill" type="button">
-            TASKBOARD
-          </button>
-
-          <button
-            className="side-link"
-            type="button"
-            onClick={() => alert("Tags UI stub — add backend tags later.")}
-            title="Hook this up after you add tags to the DB/API"
-          >
-            Add tag +
-          </button>
-
-          <div className="side-muted">
-            Issue #22: Home page UI
-            <br />
-            (Sidebar + taskboard)
-          </div>
+          <div className="side-title">Dashboard</div>
+          <button className="side-pill" type="button">Taskboard</button>
+          <button className="side-link" type="button" onClick={() => nav("/account")}>Account settings</button>
+          <button className="side-link side-link-danger" type="button" onClick={signOut}>Sign out</button>
         </aside>
 
-        <section className="panel">
-          <div className="panel-head">
-            <div>
-              <h1 className="panel-title">Taskboard</h1>
-              <p className="panel-sub">Create tasks with details for your day.</p>
-            </div>
-            <button className="ghost-btn" type="button" onClick={fetchTasks}>
-              Refresh
-            </button>
-          </div>
-
-          <form className="create" onSubmit={createTask}>
-            <input
-              className="input"
-              placeholder="Task title…"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              maxLength={120}
-            />
-
-            <div className="row">
-              <label className="field">
-                <span>Duration (min)</span>
-                <input
-                  className="input"
-                  type="number"
-                  min={5}
-                  max={600}
-                  value={duration}
-                  onChange={(e) => setDuration(Number(e.target.value))}
-                />
-              </label>
-
-              <label className="field">
-                <span>Deadline</span>
-                <input
-                  className="input"
-                  type="date"
-                  value={deadline}
-                  onChange={(e) => setDeadline(e.target.value)}
-                />
-              </label>
-
-              <label className="field">
-                <span>Importance</span>
-                <select
-                  className="input"
-                  value={importance}
-                  onChange={(e) => setImportance(Number(e.target.value))}
-                >
-                  <option value={1}>1 (Very low)</option>
-                  <option value={2}>2 (Low)</option>
-                  <option value={3}>3 (Medium)</option>
-                  <option value={4}>4 (High)</option>
-                  <option value={5}>5 (Very high)</option>
-                </select>
-              </label>
-
-              <button className="primary-btn" type="submit" disabled={creating}>
-                {creating ? "Adding…" : "Add task"}
-              </button>
-            </div>
-          </form>
-
-          {err && <div className="error">{err}</div>}
-
-          <div className="list">
-            {loading ? (
-              <div className="empty">Loading tasks…</div>
-            ) : tasks.length === 0 ? (
-              <div className="empty">No tasks yet. Add one above.</div>
-            ) : (
-              tasks.map((t) => (
-                <article className="task" key={t.id}>
-                  <div className="task-main">
-                    <div className="task-title">{t.title}</div>
-                    <div className="task-meta">
-                      <span>{t.duration_minutes} min</span>
-                      <span>•</span>
-                      <span>{importanceLabel(t.importance)}</span>
-                      {t.deadline ? (
-                        <>
-                          <span>•</span>
-                          <span>Due {t.deadline}</span>
-                        </>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <button className="danger-btn" onClick={() => deleteTask(t.id)}>
-                    Delete
-                  </button>
-                </article>
-              ))
-            )}
-          </div>
-
-          <section className="security-section" style={{ marginTop: 32, padding: 24, border: "1px solid #333", borderRadius: 8 }}>
-            <h2 style={{ marginTop: 0 }}>Security — Two-factor authentication</h2>
-            {twoFAMessage && (
-              <p style={{ color: twoFAMessage.type === "err" ? "#ff6b6b" : "#38d9a9", marginBottom: 12 }}>{twoFAMessage.text}</p>
-            )}
-            {(totpEnabled === null && email2FAEnabled === null) && <p>Loading…</p>}
-            {(totpEnabled !== null || email2FAEnabled !== null) && (
-            <>
-            <div style={{ marginBottom: 24 }}>
-              <h3 style={{ fontSize: "1rem", marginBottom: 8 }}>Authenticator app</h3>
-              {totpEnabled === false && !twoFASetup && (
-                <div>
-                  <p>Use Google Authenticator, Authy, etc. to get a 6-digit code at login.</p>
-                  <button type="button" onClick={start2FASetup} disabled={twoFALoading} className="submit-btn" style={{ marginTop: 8 }}>
-                    Enable authenticator 2FA
-                  </button>
-                </div>
-              )}
-              {twoFASetup && (
-                <div>
-                  <p>Scan this QR code with your authenticator app, then enter the 6-digit code below.</p>
-                  <img
-                    src={`data:image/png;base64,${String(twoFASetup.qr_base64).replace(/\s/g, "")}`}
-                    alt="2FA QR - scan with authenticator app"
-                    style={{ display: "block", margin: "12px 0", width: 180, height: 180, border: "1px solid #444" }}
-                  />
-                  <p style={{ fontSize: "0.85rem", color: "#888", marginTop: 8 }}>
-                    Can&apos;t scan? Enter this secret manually in your app: <code style={{ userSelect: "all", padding: "2px 6px", background: "#222" }}>{twoFASetup.secret}</code>
-                  </p>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="000000"
-                    maxLength={6}
-                    value={twoFASetupCode}
-                    onChange={(e) => setTwoFASetupCode(e.target.value.replace(/\D/g, ""))}
-                    disabled={twoFALoading}
-                    style={{ padding: 8, marginRight: 8, width: 100 }}
-                  />
-                  <button type="button" onClick={confirm2FASetup} disabled={twoFALoading || twoFASetupCode.length !== 6} className="submit-btn" style={{ marginRight: 8 }}>
-                    Verify &amp; enable
-                  </button>
-                  <button type="button" onClick={() => { setTwoFASetup(null); setTwoFAMessage(null); }} disabled={twoFALoading} className="link-btn">
-                    Cancel
-                  </button>
-                </div>
-              )}
-              {totpEnabled === true && !twoFASetup && (
-                <div>
-                  <p>Authenticator 2FA is <strong>on</strong>.</p>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="Code to disable"
-                    maxLength={6}
-                    value={twoFADisableCode}
-                    onChange={(e) => setTwoFADisableCode(e.target.value.replace(/\D/g, ""))}
-                    disabled={twoFALoading}
-                    style={{ padding: 8, marginRight: 8, width: 120 }}
-                  />
-                  <button type="button" onClick={disable2FA} disabled={twoFALoading || twoFADisableCode.length !== 6} className="submit-btn" style={{ background: "#666" }}>
-                    Disable authenticator 2FA
-                  </button>
-                </div>
-              )}
+        <div className="dash-content">
+          {/* Tasks Panel */}
+          <section className="panel">
+            <div className="panel-head">
+              <div>
+                <h1 className="panel-title">My Tasks</h1>
+                <p className="panel-sub">{tasks.length} task{tasks.length !== 1 ? "s" : ""} total</p>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="ghost-btn" type="button" onClick={fetchTasks}>↻ Refresh</button>
+                <button className="primary-btn" type="button" onClick={() => setShowAddModal(true)}>+ Add Task</button>
+              </div>
             </div>
 
-            <div>
-              <h3 style={{ fontSize: "1rem", marginBottom: 8 }}>Email code</h3>
-              {email2FAEnabled === false && (
-                <div>
-                  <p>Receive a 6-digit code by email at login (uses the same email as in <code>email_utils.py</code>).</p>
-                  <button type="button" onClick={enableEmail2FA} disabled={twoFALoading} className="submit-btn" style={{ marginTop: 8 }}>
-                    Enable email 2FA
-                  </button>
+            {err && <div className="error">{err}</div>}
+
+            <div className="list">
+              {loading ? (
+                <div className="empty">Loading tasks…</div>
+              ) : tasks.length === 0 ? (
+                <div className="empty">
+                  <div style={{ fontSize: "2rem", marginBottom: 8 }}>📋</div>
+                  No tasks yet. Click <strong>+ Add Task</strong> to get started.
                 </div>
-              )}
-              {email2FAEnabled === true && (
-                <div>
-                  <p>Email 2FA is <strong>on</strong>. You can request a code at login.</p>
-                  <button type="button" onClick={disableEmail2FA} disabled={twoFALoading} className="submit-btn" style={{ background: "#666", marginTop: 8 }}>
-                    Disable email 2FA
-                  </button>
-                </div>
+              ) : (
+                <>
+                  {upcomingTasks.length > 0 && (
+                    <>
+                      <div className="task-group-label">Upcoming deadlines</div>
+                      {upcomingTasks.map((t) => (
+                        <article className="task" key={t.id}>
+                          <div className="task-main">
+                            <div className="task-title">{t.title}</div>
+                            <div className="task-meta">
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                <span style={{ width: 7, height: 7, borderRadius: "50%", background: importanceDot(t.importance), display: "inline-block" }}></span>
+                                {importanceLabel(t.importance)}
+                              </span>
+                              <span>•</span>
+                              <span>{t.duration_minutes} min</span>
+                              <span>•</span>
+                              <span className="deadline-badge">📅 {t.deadline}</span>
+                            </div>
+                          </div>
+                          <button className="danger-btn" onClick={() => deleteTask(t.id)}>Delete</button>
+                        </article>
+                      ))}
+                    </>
+                  )}
+                  {noDeadlineTasks.length > 0 && (
+                    <>
+                      <div className="task-group-label" style={{ marginTop: upcomingTasks.length > 0 ? 16 : 0 }}>No deadline</div>
+                      {noDeadlineTasks.map((t) => (
+                        <article className="task" key={t.id}>
+                          <div className="task-main">
+                            <div className="task-title">{t.title}</div>
+                            <div className="task-meta">
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                <span style={{ width: 7, height: 7, borderRadius: "50%", background: importanceDot(t.importance), display: "inline-block" }}></span>
+                                {importanceLabel(t.importance)}
+                              </span>
+                              <span>•</span>
+                              <span>{t.duration_minutes} min</span>
+                            </div>
+                          </div>
+                          <button className="danger-btn" onClick={() => deleteTask(t.id)}>Delete</button>
+                        </article>
+                      ))}
+                    </>
+                  )}
+                </>
               )}
             </div>
-            </>
-            )}
           </section>
-        </section>
+
+          {/* Calendar Panel */}
+          <section className="panel calendar-panel">
+            <div className="calendar-header">
+              <button className="cal-nav-btn" onClick={prevMonth}>‹</button>
+              <h2 className="calendar-title">{MONTH_NAMES[calMonth]} {calYear}</h2>
+              <button className="cal-nav-btn" onClick={nextMonth}>›</button>
+            </div>
+
+            <div className="calendar-grid">
+              {["Su","Mo","Tu","We","Th","Fr","Sa"].map(d => (
+                <div key={d} className="cal-day-name">{d}</div>
+              ))}
+              {calDays.map((day, i) => {
+                if (!day) return <div key={`empty-${i}`} className="cal-day cal-day-empty" />;
+                const dayTasks = tasksForDay(day);
+                const isToday = day === today.getDate() && calMonth === today.getMonth() && calYear === today.getFullYear();
+                return (
+                  <div key={day} className={`cal-day ${isToday ? "cal-day-today" : ""} ${dayTasks.length > 0 ? "cal-day-has-tasks" : ""}`}>
+                    <span className="cal-day-num">{day}</span>
+                    {dayTasks.slice(0, 2).map(t => (
+                      <div key={t.id} className="cal-task-chip" style={{ borderLeftColor: importanceDot(t.importance) }}>
+                        {t.title}
+                      </div>
+                    ))}
+                    {dayTasks.length > 2 && (
+                      <div className="cal-task-more">+{dayTasks.length - 2} more</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        </div>
       </main>
+
+      {/* Add Task Modal */}
+      {showAddModal && (
+        <div className="modal-overlay">
+          <div className="modal" ref={modalRef}>
+            <div className="modal-header">
+              <h2 className="modal-title">Add New Task</h2>
+              <button className="modal-close" onClick={() => setShowAddModal(false)}>✕</button>
+            </div>
+
+            {createErr && <div className="error" style={{ marginBottom: 16 }}>{createErr}</div>}
+
+            <form onSubmit={createTask}>
+              <div className="modal-field">
+                <label>Task title</label>
+                <input
+                  className="input"
+                  placeholder="What needs to be done?"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  maxLength={120}
+                  autoFocus
+                />
+              </div>
+
+              <div className="modal-row">
+                <div className="modal-field">
+                  <label>Duration (min)</label>
+                  <input
+                    className="input"
+                    type="number"
+                    min={5}
+                    max={600}
+                    value={duration}
+                    onChange={(e) => setDuration(Number(e.target.value))}
+                  />
+                </div>
+                <div className="modal-field">
+                  <label>Deadline</label>
+                  <input
+                    className="input"
+                    type="date"
+                    value={deadline}
+                    onChange={(e) => setDeadline(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="modal-field">
+                <label>Importance</label>
+                <div className="importance-picker">
+                  {[1,2,3,4,5].map(n => (
+                    <button
+                      key={n}
+                      type="button"
+                      className={`importance-btn ${importance === n ? "importance-btn-active" : ""}`}
+                      style={{ "--dot-color": importanceDot(n) } as React.CSSProperties}
+                      onClick={() => setImportance(n)}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+                <div className="importance-label-text">{importanceLabel(importance)}</div>
+              </div>
+
+              <div className="modal-actions">
+                <button type="button" className="ghost-btn" onClick={() => setShowAddModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="primary-btn" disabled={creating || !title.trim()}>
+                  {creating ? "Adding…" : "Add Task"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 }
