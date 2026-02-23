@@ -96,7 +96,7 @@ macOS / Linux:
 source venv/bin/activate
 
 
-Install backend dependencies:
+Install dependencies from root:
 pip install -r requirements.txt
 
 

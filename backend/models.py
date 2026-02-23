@@ -4,6 +4,9 @@ from datetime import datetime, timezone
 from typing import Optional
 from backend.database import Base
 
+# SQLite: INTEGER PRIMARY KEY AUTOINCREMENT, VARCHAR→TEXT. MySQL: INT AUTO_INCREMENT,
+# VARCHAR(n). SQLAlchemy abstracts these; schema_mysql.sql has MySQL-specific DDL.
+
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -20,13 +23,17 @@ class User(Base):
     password_hash : Mapped[str]            = mapped_column(String, nullable=False)
     is_verified   : Mapped[bool]           = mapped_column(Boolean, default=False, nullable=False)
     is_active     : Mapped[bool]           = mapped_column(Boolean, default=True, nullable=False)
-    created_at    : Mapped[datetime]       = mapped_column(default=utcnow)
+    totp_secret   : Mapped[Optional[str]]  = mapped_column(String(32), nullable=True)   # base32 secret for TOTP
+    totp_enabled      : Mapped[bool]            = mapped_column(Boolean, default=False, nullable=False)
+    email_2fa_enabled : Mapped[bool]            = mapped_column(Boolean, default=False, nullable=False)
+    created_at        : Mapped[datetime]       = mapped_column(default=utcnow)
     last_login    : Mapped[Optional[datetime]] = mapped_column(nullable=True)
 
     tasks               : Mapped[list["Task"]]                   = relationship(back_populates="owner", cascade="all, delete-orphan")
     feedback_entries    : Mapped[list["Feedback"]]               = relationship(back_populates="owner", cascade="all, delete-orphan")
     verification_tokens : Mapped[list["EmailVerificationToken"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     refresh_tokens      : Mapped[list["RefreshToken"]]           = relationship(back_populates="user", cascade="all, delete-orphan")
+    email_2fa_codes     : Mapped[list["Email2FACode"]]            = relationship(back_populates="user", cascade="all, delete-orphan")
     password_reset_tokens : Mapped[list["PasswordResetToken"]]   = relationship(back_populates="user", cascade="all, delete-orphan")
 
 
@@ -53,6 +60,20 @@ class RefreshToken(Base):
     revoked    : Mapped[bool]     = mapped_column(Boolean, default=False, nullable=False)
 
     user: Mapped["User"] = relationship(back_populates="refresh_tokens")
+
+
+class Email2FACode(Base):
+    """One-time 6-digit code sent to user's email for 2FA login. Replaced on each send.
+    MySQL: use VARCHAR(10) for code, DATETIME for expires_at (schema_mysql.sql)."""
+    __tablename__ = "email_2fa_codes"
+
+    id         : Mapped[int]      = mapped_column(Integer, primary_key=True, index=True)
+    user_id    : Mapped[int]      = mapped_column(ForeignKey("users.id"), nullable=False)
+    code       : Mapped[str]      = mapped_column(String(10), nullable=False)
+    expires_at : Mapped[datetime] = mapped_column(nullable=False)
+    created_at : Mapped[datetime] = mapped_column(default=utcnow)
+
+    user: Mapped["User"] = relationship(back_populates="email_2fa_codes")
 
 
 class PasswordResetToken(Base):

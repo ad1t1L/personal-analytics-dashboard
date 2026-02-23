@@ -1,0 +1,20 @@
+# Backend API (FastAPI)
+python-dotenv>=1.0.0
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-jose[cryptography]>=3.3.0
+bcrypt>=4.1.0
+python-multipart>=0.0.6
+pydantic[email-validation]>=2.5.0
+email-validator>=2.0.0
+requests
+
+# DB
+sqlalchemy>=2.0.0
+# SQLite (default)
+# MySQL (use when DATABASE_URL starts with mysql)
+PyMySQL>=1.1.0
+
+# 2FA (TOTP for authenticator apps)
+pyotp>=2.9.0
+qrcode[pil]>=7.4.0
