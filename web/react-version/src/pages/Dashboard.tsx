@@ -52,6 +52,48 @@ const MONTH_NAMES = [
   "July","August","September","October","November","December"
 ];
 
+// ── Star rating component ──────────────────────────────────────────────────────
+function StarRating({ value, onChange }: { value: number; onChange: (n: number) => void }) {
+  const [hover, setHover] = useState(0);
+  return (
+    <div className="star-rating">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button
+          key={n}
+          type="button"
+          className={`star-btn ${n <= (hover || value) ? "star-btn-filled" : ""}`}
+          onMouseEnter={() => setHover(n)}
+          onMouseLeave={() => setHover(0)}
+          onClick={() => onChange(value === n ? 0 : n)}
+          aria-label={`${n} star${n > 1 ? "s" : ""}`}
+        >
+          ★
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── Stress dot scale (1-5) ─────────────────────────────────────────────────────
+function StressScale({ value, onChange }: { value: number; onChange: (n: number) => void }) {
+  return (
+    <div className="stress-scale">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button
+          key={n}
+          type="button"
+          className={`stress-dot ${value === n ? "stress-dot-active" : ""}`}
+          data-level={n}
+          onClick={() => onChange(value === n ? 0 : n)}
+          aria-label={`Stress level ${n}`}
+        >
+          {n}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const nav = useNavigate();
   const [session, setSession] = useState<Session | null>(null);
@@ -73,6 +115,26 @@ export default function Dashboard() {
   const [creating, setCreating] = useState(false);
   const [createErr, setCreateErr] = useState<string | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
+
+  // Task completion survey modal (#38)
+  const [showTaskSurvey, setShowTaskSurvey] = useState(false);
+  const [surveyTaskId, setSurveyTaskId] = useState<number | null>(null);
+  const [surveyTaskTitle, setSurveyTaskTitle] = useState("");
+  const [surveyFeeling, setSurveyFeeling] = useState<string>("");
+  const [surveySatisfaction, setSurveySatisfaction] = useState<number>(0);
+  const [submittingTaskSurvey, setSubmittingTaskSurvey] = useState(false);
+  const taskSurveyRef = useRef<HTMLDivElement>(null);
+
+  // End-of-day survey modal (#40)
+  const [showEODModal, setShowEODModal] = useState(false);
+  const [eodStressMorning, setEodStressMorning] = useState<number>(0);
+  const [eodStressAfternoon, setEodStressAfternoon] = useState<number>(0);
+  const [eodStressEvening, setEodStressEvening] = useState<number>(0);
+  const [eodOverall, setEodOverall] = useState<number>(0);
+  const [eodNotes, setEodNotes] = useState("");
+  const [submittingEOD, setSubmittingEOD] = useState(false);
+  const [eodSuccess, setEodSuccess] = useState(false);
+  const eodModalRef = useRef<HTMLDivElement>(null);
 
   // Calendar
   const today = new Date();
@@ -99,7 +161,7 @@ export default function Dashboard() {
       const res = await fetch(`${API}/tasks/`, { headers: { Authorization: `Bearer ${t}` } });
       if (res.status === 401) { sessionStorage.clear(); nav("/login", { replace: true }); return; }
       const data = await res.json();
-      setTasks(Array.isArray(data.tasks) ? data.tasks : []);
+      setTasks(Array.isArray(data.tasks) ? data.tasks.filter((t: Task) => !t.completed) : []);
     } catch {
       setErr("Could not load tasks. Is the backend running on :8000?");
     } finally {
@@ -127,7 +189,7 @@ export default function Dashboard() {
 
   useEffect(() => { if (session) fetch2FAStatus(); }, [session, fetch2FAStatus]);
 
-  // Close modal on outside click
+  // Close Add Task modal on outside click / Escape
   useEffect(() => {
     if (!showAddModal) return;
     function handleClick(e: MouseEvent) {
@@ -139,7 +201,6 @@ export default function Dashboard() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, [showAddModal]);
 
-  // Close modal on Escape
   useEffect(() => {
     if (!showAddModal) return;
     function handleKey(e: KeyboardEvent) {
@@ -148,6 +209,48 @@ export default function Dashboard() {
     document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
   }, [showAddModal]);
+
+  // Close Task Survey modal on outside click / Escape
+  useEffect(() => {
+    if (!showTaskSurvey) return;
+    function handleClick(e: MouseEvent) {
+      if (taskSurveyRef.current && !taskSurveyRef.current.contains(e.target as Node)) {
+        setShowTaskSurvey(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showTaskSurvey]);
+
+  useEffect(() => {
+    if (!showTaskSurvey) return;
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setShowTaskSurvey(false);
+    }
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [showTaskSurvey]);
+
+  // Close EOD modal on outside click / Escape
+  useEffect(() => {
+    if (!showEODModal) return;
+    function handleClick(e: MouseEvent) {
+      if (eodModalRef.current && !eodModalRef.current.contains(e.target as Node)) {
+        setShowEODModal(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showEODModal]);
+
+  useEffect(() => {
+    if (!showEODModal) return;
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setShowEODModal(false);
+    }
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [showEODModal]);
 
   async function createTask(e: React.FormEvent) {
     e.preventDefault();
@@ -190,6 +293,108 @@ export default function Dashboard() {
       setTasks(prev);
       setErr("Could not delete task. Is the backend running?");
     }
+  }
+
+  async function completeTask(id: number, taskTitle: string) {
+    const t = sessionStorage.getItem("access_token");
+    if (!t) return nav("/login", { replace: true });
+
+    // Optimistically remove from active list
+    setTasks((prev) => prev.filter((task) => task.id !== id));
+
+    try {
+      const res = await fetch(`${API}/tasks/${id}/complete`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${t}` },
+      });
+      if (res.status === 401) { sessionStorage.clear(); nav("/login", { replace: true }); return; }
+      if (!res.ok) {
+        await fetchTasks();
+        return;
+      }
+    } catch {
+      await fetchTasks();
+      return;
+    }
+
+    // Open task completion survey
+    setSurveyTaskId(id);
+    setSurveyTaskTitle(taskTitle);
+    setSurveyFeeling("");
+    setSurveySatisfaction(0);
+    setShowTaskSurvey(true);
+  }
+
+  async function submitTaskSurvey() {
+    const t = sessionStorage.getItem("access_token");
+    if (!t || !surveyTaskId) { setShowTaskSurvey(false); return; }
+    setSubmittingTaskSurvey(true);
+    try {
+      await fetch(`${API}/feedback/task-feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` },
+        body: JSON.stringify({
+          task_id:      surveyTaskId,
+          feeling:      surveyFeeling || null,
+          satisfaction: surveySatisfaction || null,
+        }),
+      });
+    } catch {}
+    setSubmittingTaskSurvey(false);
+    setShowTaskSurvey(false);
+  }
+
+  async function openEODModal() {
+    const t = sessionStorage.getItem("access_token");
+    if (!t) return;
+
+    // Reset state before pre-filling
+    setEodStressMorning(0);
+    setEodStressAfternoon(0);
+    setEodStressEvening(0);
+    setEodOverall(0);
+    setEodNotes("");
+    setEodSuccess(false);
+    setShowEODModal(true);
+
+    try {
+      const res = await fetch(`${API}/feedback/daily-feedback/today`, {
+        headers: { Authorization: `Bearer ${t}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.feedback) {
+          setEodStressMorning(data.feedback.stress_morning   || 0);
+          setEodStressAfternoon(data.feedback.stress_afternoon || 0);
+          setEodStressEvening(data.feedback.stress_evening   || 0);
+          setEodOverall(data.feedback.overall_rating         || 0);
+          setEodNotes(data.feedback.notes                    || "");
+        }
+      }
+    } catch {}
+  }
+
+  async function submitEOD(e: React.FormEvent) {
+    e.preventDefault();
+    const t = sessionStorage.getItem("access_token");
+    if (!t) return;
+    setSubmittingEOD(true);
+    try {
+      await fetch(`${API}/feedback/daily-feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` },
+        body: JSON.stringify({
+          stress_morning:   eodStressMorning   || null,
+          stress_afternoon: eodStressAfternoon || null,
+          stress_evening:   eodStressEvening   || null,
+          overall_rating:   eodOverall         || null,
+          notes:            eodNotes           || null,
+        }),
+      });
+      setEodSuccess(true);
+      setTimeout(() => setShowEODModal(false), 1400);
+    } catch {}
+    setSubmittingEOD(false);
   }
 
   async function signOut() {
@@ -242,12 +447,32 @@ export default function Dashboard() {
     .sort((a, b) => (a.deadline ?? "").localeCompare(b.deadline ?? ""));
   const noDeadlineTasks = tasks.filter(t => !t.deadline);
 
+  // ── Task card actions ────────────────────────────────────────────────────────
+  function TaskActions({ task }: { task: Task }) {
+    return (
+      <div className="task-actions">
+        <button
+          className="complete-btn"
+          onClick={() => completeTask(task.id, task.title)}
+          title="Mark as complete"
+          aria-label="Mark as complete"
+        >
+          ✓
+        </button>
+        <button className="danger-btn" onClick={() => deleteTask(task.id)}>Delete</button>
+      </div>
+    );
+  }
+
   return (
     <>
       <header>
         <div className="brand">📋 PlannerHub</div>
         <div className="user-info">
           <span className="header-greeting">👋 {displayName}</span>
+          <button className="eod-btn" type="button" onClick={openEODModal}>
+            End of Day Check-In
+          </button>
           <button className="ghost-btn" type="button" onClick={() => nav("/account")}>Account</button>
           <button className="signout-btn" onClick={signOut}>Sign Out</button>
         </div>
@@ -320,7 +545,7 @@ export default function Dashboard() {
                               <span className="deadline-badge">📅 {t.deadline}</span>
                             </div>
                           </div>
-                          <button className="danger-btn" onClick={() => deleteTask(t.id)}>Delete</button>
+                          <TaskActions task={t} />
                         </article>
                       ))}
                     </>
@@ -341,7 +566,7 @@ export default function Dashboard() {
                               <span>{t.duration_minutes} min</span>
                             </div>
                           </div>
-                          <button className="danger-btn" onClick={() => deleteTask(t.id)}>Delete</button>
+                          <TaskActions task={t} />
                         </article>
                       ))}
                     </>
@@ -386,7 +611,7 @@ export default function Dashboard() {
         </div>
       </main>
 
-      {/* Add Task Modal */}
+      {/* ── Add Task Modal ──────────────────────────────────────────────────────── */}
       {showAddModal && (
         <div className="modal-overlay">
           <div className="modal" ref={modalRef}>
@@ -460,6 +685,147 @@ export default function Dashboard() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Task Completion Survey Modal (#38) ──────────────────────────────────── */}
+      {showTaskSurvey && (
+        <div className="modal-overlay">
+          <div className="modal survey-modal" ref={taskSurveyRef}>
+            <div className="modal-header">
+              <h2 className="modal-title">Task Complete 🎉</h2>
+              <button className="modal-close" onClick={() => setShowTaskSurvey(false)}>✕</button>
+            </div>
+
+            <p className="survey-task-name">"{surveyTaskTitle}"</p>
+            <p className="survey-subtitle">Quick check-in — how did that go?</p>
+
+            <div className="survey-section">
+              <div className="survey-label">How did that task feel?</div>
+              <div className="feeling-pills">
+                {(["drained", "neutral", "energized"] as const).map((f) => (
+                  <button
+                    key={f}
+                    type="button"
+                    className={`feeling-pill feeling-pill-${f} ${surveyFeeling === f ? "feeling-pill-active" : ""}`}
+                    onClick={() => setSurveyFeeling(surveyFeeling === f ? "" : f)}
+                  >
+                    {f === "drained" ? "😓" : f === "neutral" ? "😐" : "⚡"}
+                    {" "}{f.charAt(0).toUpperCase() + f.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="survey-section">
+              <div className="survey-label">Satisfaction</div>
+              <StarRating value={surveySatisfaction} onChange={setSurveySatisfaction} />
+              <div className="survey-hint">
+                {surveySatisfaction === 0 ? "Tap a star to rate" :
+                 surveySatisfaction === 1 ? "Not satisfied" :
+                 surveySatisfaction === 2 ? "Slightly satisfied" :
+                 surveySatisfaction === 3 ? "Satisfied" :
+                 surveySatisfaction === 4 ? "Very satisfied" : "Extremely satisfied"}
+              </div>
+            </div>
+
+            <div className="modal-actions" style={{ marginTop: 8 }}>
+              <button type="button" className="ghost-btn" onClick={() => setShowTaskSurvey(false)}>
+                Skip
+              </button>
+              <button
+                type="button"
+                className="primary-btn"
+                onClick={submitTaskSurvey}
+                disabled={submittingTaskSurvey}
+              >
+                {submittingTaskSurvey ? "Saving…" : "Submit"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── End of Day Survey Modal (#40) ───────────────────────────────────────── */}
+      {showEODModal && (
+        <div className="modal-overlay">
+          <div className="modal survey-modal eod-modal" ref={eodModalRef}>
+            <div className="modal-header">
+              <h2 className="modal-title">End of Day Check-In</h2>
+              <button className="modal-close" onClick={() => setShowEODModal(false)}>✕</button>
+            </div>
+
+            {eodSuccess ? (
+              <div className="eod-success">
+                <div className="eod-success-icon">✓</div>
+                <div className="eod-success-text">Check-in saved! See you tomorrow.</div>
+              </div>
+            ) : (
+              <form onSubmit={submitEOD}>
+                <p className="survey-subtitle" style={{ marginBottom: 20 }}>
+                  Rate your stress levels throughout the day to help adapt your schedule.
+                </p>
+
+                <div className="survey-section">
+                  <div className="survey-label">Stress levels by time of day</div>
+                  <div className="stress-hint-row">
+                    <span className="stress-hint">1 = Very relaxed</span>
+                    <span className="stress-hint">5 = Very stressed</span>
+                  </div>
+
+                  <div className="stress-period-row">
+                    <span className="stress-period-label">🌅 Morning</span>
+                    <StressScale value={eodStressMorning} onChange={setEodStressMorning} />
+                  </div>
+                  <div className="stress-period-row">
+                    <span className="stress-period-label">☀️ Afternoon</span>
+                    <StressScale value={eodStressAfternoon} onChange={setEodStressAfternoon} />
+                  </div>
+                  <div className="stress-period-row">
+                    <span className="stress-period-label">🌙 Evening</span>
+                    <StressScale value={eodStressEvening} onChange={setEodStressEvening} />
+                  </div>
+                </div>
+
+                <div className="survey-section">
+                  <div className="survey-label">Overall day rating</div>
+                  <StarRating value={eodOverall} onChange={setEodOverall} />
+                  <div className="survey-hint">
+                    {eodOverall === 0 ? "How was your day overall?" :
+                     eodOverall === 1 ? "Rough day" :
+                     eodOverall === 2 ? "Below average" :
+                     eodOverall === 3 ? "Average" :
+                     eodOverall === 4 ? "Good day" : "Great day!"}
+                  </div>
+                </div>
+
+                <div className="survey-section">
+                  <div className="survey-label">Notes <span className="survey-label-optional">(optional)</span></div>
+                  <textarea
+                    className="input eod-notes"
+                    placeholder="Anything notable about today?"
+                    value={eodNotes}
+                    onChange={(e) => setEodNotes(e.target.value)}
+                    rows={3}
+                    maxLength={500}
+                  />
+                </div>
+
+                <div className="modal-actions" style={{ marginTop: 4 }}>
+                  <button type="button" className="ghost-btn" onClick={() => setShowEODModal(false)}>
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="primary-btn"
+                    disabled={submittingEOD}
+                  >
+                    {submittingEOD ? "Saving…" : "Save Check-In"}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

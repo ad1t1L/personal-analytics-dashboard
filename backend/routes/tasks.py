@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from backend.database import SessionLocal
-from backend.models import Task, User
+from backend.models import Task, User, utcnow
 from backend.dependencies import get_db, get_current_user
 
 router = APIRouter()
@@ -55,6 +55,31 @@ def create_task(
     db.commit()
     db.refresh(task)
     return {"created": True, "task": task}
+
+
+@router.patch("/{task_id}/complete")
+def complete_task(
+    task_id:      int,
+    db:           Session = Depends(get_db),
+    current_user: User    = Depends(get_current_user),
+):
+    """
+    Marks a task as completed with a timestamp.
+    Only the task's owner can complete it (IDOR protection).
+    """
+    task = db.query(Task).filter(
+        Task.id      == task_id,
+        Task.user_id == current_user.id,
+    ).first()
+
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    task.completed    = True
+    task.completed_at = utcnow()
+    db.commit()
+    db.refresh(task)
+    return {"completed": True, "task": task}
 
 
 @router.delete("/{task_id}")

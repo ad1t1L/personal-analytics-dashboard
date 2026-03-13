@@ -711,6 +711,256 @@ header .user-info {
 }
 .link-btn:hover { text-decoration: underline; }
 
+/* ── End of Day button (header) ── */
+.eod-btn {
+  padding: 7px 14px;
+  border-radius: 9px;
+  border: 1px solid rgba(56,217,169,.35);
+  background: rgba(56,217,169,.08);
+  color: var(--accent2);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--trans);
+  white-space: nowrap;
+}
+.eod-btn:hover { background: rgba(56,217,169,.16); border-color: var(--accent2); }
+
+/* ── Task action buttons row ── */
+.task-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ── Complete (checkmark) button ── */
+.complete-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  border: 1px solid rgba(56,217,169,.35);
+  background: rgba(56,217,169,.08);
+  color: var(--accent2);
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--trans);
+  flex-shrink: 0;
+}
+.complete-btn:hover {
+  background: rgba(56,217,169,.20);
+  border-color: var(--accent2);
+  transform: scale(1.08);
+}
+
+/* ── Survey modal overrides ── */
+.survey-modal {
+  max-width: 440px;
+}
+.eod-modal {
+  max-width: 500px;
+}
+
+.survey-task-name {
+  margin: 0 0 4px;
+  font-size: 0.9rem;
+  color: var(--accent2);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.survey-subtitle {
+  margin: 0 0 20px;
+  font-size: 0.86rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.survey-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.survey-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.survey-label-optional {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.survey-hint {
+  font-size: 0.78rem;
+  color: var(--muted);
+  min-height: 18px;
+}
+
+/* ── Feeling pills ── */
+.feeling-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.feeling-pill {
+  padding: 8px 16px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.86rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--trans);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.feeling-pill:hover { border-color: var(--accent); color: var(--text); }
+
+.feeling-pill-drained.feeling-pill-active {
+  background: rgba(255,107,107,.12);
+  border-color: rgba(255,107,107,.5);
+  color: var(--error);
+}
+.feeling-pill-neutral.feeling-pill-active {
+  background: rgba(255,212,59,.1);
+  border-color: rgba(255,212,59,.5);
+  color: #ffd43b;
+}
+.feeling-pill-energized.feeling-pill-active {
+  background: rgba(56,217,169,.12);
+  border-color: rgba(56,217,169,.5);
+  color: var(--accent2);
+}
+
+/* ── Star rating ── */
+.star-rating {
+  display: flex;
+  gap: 4px;
+}
+
+.star-btn {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: var(--border);
+  padding: 0 2px;
+  transition: color var(--trans), transform var(--trans);
+  line-height: 1;
+}
+.star-btn:hover { transform: scale(1.15); }
+.star-btn-filled { color: #ffd43b; }
+
+/* ── Stress scale ── */
+.stress-hint-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.stress-hint {
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+.stress-period-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.stress-period-label {
+  font-size: 0.86rem;
+  color: var(--text);
+  width: 100px;
+  flex-shrink: 0;
+}
+
+.stress-scale {
+  display: flex;
+  gap: 6px;
+}
+
+.stress-dot {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--trans);
+}
+.stress-dot:hover { border-color: var(--accent); color: var(--text); }
+.stress-dot-active {
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,.3);
+}
+/* Colour gradient: green(1) → yellow(3) → red(5) */
+.stress-dot-active[data-level="1"] { background: #38d9a9; }
+.stress-dot-active[data-level="2"] { background: #94d82d; }
+.stress-dot-active[data-level="3"] { background: #ffd43b; color: #333; }
+.stress-dot-active[data-level="4"] { background: #ffa94d; }
+.stress-dot-active[data-level="5"] { background: #ff6b6b; }
+
+/* ── EOD notes textarea ── */
+.eod-notes {
+  resize: vertical;
+  min-height: 72px;
+}
+
+/* ── EOD success state ── */
+.eod-success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 32px 16px 24px;
+  text-align: center;
+}
+.eod-success-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(56,217,169,.15);
+  border: 2px solid rgba(56,217,169,.4);
+  color: var(--accent2);
+  font-size: 1.5rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.eod-success-text {
+  font-size: 1rem;
+  color: var(--text);
+  font-weight: 500;
+}
+
 /* ── Responsive ── */
 @media (max-width: 1100px) {
   .account-layout { grid-template-columns: 1fr; }
