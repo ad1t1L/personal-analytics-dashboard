@@ -1,8 +1,12 @@
 import base64
 import io
+import logging
 import secrets as sec
+import traceback
 from datetime import datetime, timedelta, timezone
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 import qrcode
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -124,8 +128,9 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)) -> dict[str, 
 
     try:
         send_verification_email(to=email, name=str(user.name), token=raw_token)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error("Failed to send verification email to %s: %s", email, e)
+        traceback.print_exc()
 
     return {"message": "If that email is new, a verification link has been sent."}
 
@@ -198,8 +203,9 @@ def login(
             db.commit()
             try:
                 send_2fa_code_email(to=str(user.email), name=str(user.name), code=code)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error("Failed to send 2FA email to %s: %s", user.email, e)
+                traceback.print_exc()
 
         return TokenResponse(
             access_token="",
@@ -248,8 +254,9 @@ def send_email_2fa_code(body: SendEmail2FARequest, db: Session = Depends(get_db)
 
     try:
         send_2fa_code_email(to=str(user.email), name=str(user.name), code=code)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error("Failed to send 2FA email to %s: %s", user.email, e)
+        traceback.print_exc()
 
     return {"message": "Verification code sent to your email."}
 
@@ -381,8 +388,9 @@ def resend_verification(email: str, db: Session = Depends(get_db)) -> dict[str, 
 
         try:
             send_verification_email(to=email, name=str(user.name), token=raw_token)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error("Failed to send verification email to %s: %s", email, e)
+            traceback.print_exc()
 
     return {"message": "If that email is registered and unverified, a new link has been sent."}
 
@@ -510,8 +518,9 @@ def forgot_password(body: ForgotPasswordRequest, db: Session = Depends(get_db)) 
 
         try:
             send_password_reset_email(to=email, name=str(user.name), token=raw_token)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error("Failed to send password reset email to %s: %s", email, e)
+            traceback.print_exc()
 
     return {"message": "If that email is registered, a password reset link has been sent."}
 

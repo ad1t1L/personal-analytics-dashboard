@@ -29,7 +29,7 @@ PASSWORD_RESET_TOKEN_EXPIRE_HOURS = 1
 SMTP_HOST     = os.environ.get("SMTP_HOST",     "smtp.gmail.com")
 SMTP_PORT     = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USER     = os.environ.get("SMTP_USER",     "speedka65@gmail.com")
-SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "gxdd vwdt bqsl kymg")
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "goqo xlfy gcig zabg")
 FROM_EMAIL    = os.environ.get("FROM_EMAIL",    "no-reply@yourapp.com")
 
 APP_BASE_URL  = os.environ.get("APP_BASE_URL",  "http://localhost:8000")
