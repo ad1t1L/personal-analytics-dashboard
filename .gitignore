@@ -26,3 +26,6 @@ database/app.db
 # Web
 node_modules/
 dist/
+
+# Launcher binaries (built with launcher/build.sh)
+launcher/dist/

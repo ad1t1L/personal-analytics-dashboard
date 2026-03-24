@@ -1,9 +1,10 @@
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from backend.database import engine
 from backend.models import Base
@@ -44,11 +45,46 @@ app.include_router(feedback_router,  prefix="/feedback",  tags=["feedback"])
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _FRONTEND_DIST = _REPO_ROOT / "web" / "react-version" / "dist"
 if _FRONTEND_DIST.is_dir():
-    app.mount(
-        "/",
-        StaticFiles(directory=str(_FRONTEND_DIST), html=True),
-        name="spa",
-    )
+    # Serve the SPA without relying on `StaticFiles(html=True)` (it isn't
+    # reliably falling back for client-side routes like `/login`).
+    assets_dir = _FRONTEND_DIST / "assets"
+    if assets_dir.is_dir():
+        app.mount(
+            "/assets",
+            StaticFiles(directory=str(assets_dir), html=False),
+            name="spa-assets",
+        )
+
+    index_html = _FRONTEND_DIST / "index.html"
+    vite_svg = _FRONTEND_DIST / "vite.svg"
+
+    @app.get("/")
+    def spa_index():
+        return FileResponse(str(index_html))
+
+    @app.get("/vite.svg")
+    def spa_vite_svg():
+        if not vite_svg.is_file():
+            raise HTTPException(status_code=404)
+        return FileResponse(str(vite_svg))
+
+    @app.get("/{path:path}")
+    def spa_fallback(path: str):
+        # Don't swallow backend API routes.
+        if path in ("auth", "tasks", "schedules", "feedback") or path.startswith(
+            ("auth/", "tasks/", "schedules/", "feedback/")
+        ):
+            raise HTTPException(status_code=404)
+
+        # Don't handle known FastAPI URLs.
+        if path in ("openapi.json", "docs", "redoc"):
+            raise HTTPException(status_code=404)
+
+        # If it looks like a real file request, 404 instead of returning index.html.
+        if "." in path:
+            raise HTTPException(status_code=404)
+
+        return FileResponse(str(index_html))
 else:
     logging.getLogger(__name__).warning(
         "web/react-version/dist missing — run `npm run build` in web/react-version to serve the UI on :8000"
