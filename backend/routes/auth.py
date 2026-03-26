@@ -1,5 +1,6 @@
 import base64
 import io
+import logging
 import secrets as sec
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -24,6 +25,7 @@ from backend.email_utils import send_verification_email, send_2fa_code_email, se
 from backend.config import MIN_PASSWORD_LENGTH, VERIFICATION_TOKEN_EXPIRE_HOURS, EMAIL_2FA_CODE_EXPIRE_MINUTES, PASSWORD_RESET_TOKEN_EXPIRE_HOURS
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
 
 
 def _utc_now() -> datetime:
@@ -125,7 +127,9 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)) -> dict[str, 
     try:
         send_verification_email(to=email, name=str(user.name), token=raw_token)
     except Exception:
-        pass
+        logger.exception(
+            "Failed to send verification email (check SMTP_* and FROM_EMAIL in .env; see server logs)"
+        )
 
     return {"message": "If that email is new, a verification link has been sent."}
 
@@ -199,7 +203,7 @@ def login(
             try:
                 send_2fa_code_email(to=str(user.email), name=str(user.name), code=code)
             except Exception:
-                pass
+                logger.exception("Failed to send email 2FA code at login")
 
         return TokenResponse(
             access_token="",
@@ -249,7 +253,7 @@ def send_email_2fa_code(body: SendEmail2FARequest, db: Session = Depends(get_db)
     try:
         send_2fa_code_email(to=str(user.email), name=str(user.name), code=code)
     except Exception:
-        pass
+        logger.exception("Failed to send email 2FA code")
 
     return {"message": "Verification code sent to your email."}
 
@@ -382,7 +386,7 @@ def resend_verification(email: str, db: Session = Depends(get_db)) -> dict[str, 
         try:
             send_verification_email(to=email, name=str(user.name), token=raw_token)
         except Exception:
-            pass
+            logger.exception("Failed to send verification email (resend)")
 
     return {"message": "If that email is registered and unverified, a new link has been sent."}
 
@@ -511,7 +515,7 @@ def forgot_password(body: ForgotPasswordRequest, db: Session = Depends(get_db)) 
         try:
             send_password_reset_email(to=email, name=str(user.name), token=raw_token)
         except Exception:
-            pass
+            logger.exception("Failed to send password reset email")
 
     return {"message": "If that email is registered, a password reset link has been sent."}
 
