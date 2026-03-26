@@ -4,6 +4,46 @@ cd "$(dirname "$0")"
 
 ROOT_DIR="$(pwd)"
 
+# Debian/Parrot often ship Python without a working ensurepip inside venv creation.
+# Creating with --without-pip avoids that failure; we install pip afterward.
+create_venv_no_pip() {
+  echo "Creating Python virtual env (.venv, without bundled pip)..." >&2
+  if python3 -m venv --help 2>/dev/null | grep -q -- '--without-pip'; then
+    python3 -m venv --without-pip .venv
+  else
+    python3 -m venv .venv
+  fi
+}
+
+bootstrap_pip() {
+  local py="$1"
+  if "$py" -m pip --version >/dev/null 2>&1; then
+    return 0
+  fi
+  echo "Installing pip into venv..." >&2
+  if "$py" -m ensurepip --upgrade --default-pip 2>/dev/null; then
+    return 0
+  fi
+  echo "ensurepip failed; downloading get-pip.py (works on Debian/Parrot minimal installs)..." >&2
+  local gp
+  gp="$(mktemp)"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL https://bootstrap.pypa.io/get-pip.py -o "$gp"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -qO "$gp" https://bootstrap.pypa.io/get-pip.py
+  else
+    echo "Need curl or wget to download get-pip.py." >&2
+    return 1
+  fi
+  if ! "$py" "$gp"; then
+    rm -f "$gp"
+    echo "get-pip.py failed. Try: sudo apt-get install -y python3-venv python3-pip" >&2
+    return 1
+  fi
+  rm -f "$gp"
+  "$py" -m pip --version >/dev/null 2>&1
+}
+
 retry_cmd() {
   # Usage: retry_cmd <retries> <sleep_seconds> -- <command...>
   local retries="$1"
@@ -46,39 +86,31 @@ pick_python() {
 
 PY="$(pick_python || true)"
 if [[ -z "${PY:-}" ]]; then
-  echo "Creating Python virtual env (.venv)..." >&2
-  python3 -m venv .venv
+  create_venv_no_pip
   PY="$ROOT_DIR/.venv/bin/python3"
 fi
 
-# Some fresh installs create a venv without `pip`. If so, bootstrap it via ensurepip,
-# and if that doesn't exist, install the system packages and recreate the venv.
-if ! "$PY" -m pip --version >/dev/null 2>&1; then
-  echo "Bootstrapping pip in venv (ensurepip)..." >&2
-  if ! "$PY" -m ensurepip --upgrade --default-pip >/dev/null 2>&1; then
-    echo "ensurepip missing. Installing system python3-pip/python3-venv..." >&2
-    if command -v apt-get >/dev/null 2>&1; then
-      # Wait for apt/dpkg lock to clear (common on fresh machines).
-      for _ in $(seq 1 60); do
-        if pgrep -x apt-get >/dev/null 2>&1 || pgrep -x apt >/dev/null 2>&1 || pgrep -x dpkg >/dev/null 2>&1; then
-          sleep 2
-          continue
-        fi
-        break
-      done
-      sudo apt-get update
-      sudo apt-get install -y python3-venv python3-pip
-      rm -rf "$ROOT_DIR/.venv" "$ROOT_DIR/venv"
-      python3 -m venv .venv
-      PY="$ROOT_DIR/.venv/bin/python3"
-    else
-      echo "No apt-get available to install python3-pip. Install python3-pip manually." >&2
+if ! bootstrap_pip "$PY"; then
+  if command -v apt-get >/dev/null 2>&1; then
+    echo "Trying system packages (python3-venv python3-pip), then recreating venv..." >&2
+    for _ in $(seq 1 60); do
+      if pgrep -x apt-get >/dev/null 2>&1 || pgrep -x apt >/dev/null 2>&1 || pgrep -x dpkg >/dev/null 2>&1; then
+        sleep 2
+        continue
+      fi
+      break
+    done
+    sudo apt-get update
+    sudo apt-get install -y python3-venv python3-pip
+    rm -rf "$ROOT_DIR/.venv" "$ROOT_DIR/venv"
+    create_venv_no_pip
+    PY="$ROOT_DIR/.venv/bin/python3"
+    bootstrap_pip "$PY" || {
+      echo "Could not install pip into venv. See errors above." >&2
       exit 1
-    fi
-    if ! "$PY" -m ensurepip --upgrade --default-pip >/dev/null 2>&1; then
-      echo "Failed to bootstrap pip after installing system packages." >&2
-      exit 1
-    fi
+    }
+  else
+    exit 1
   fi
 fi
 
