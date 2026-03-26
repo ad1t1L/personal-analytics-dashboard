@@ -22,6 +22,7 @@ from pathlib import Path
 
 HOST = os.environ.get("PAD_HOST", "127.0.0.1")
 PORT = int(os.environ.get("PAD_PORT", "8000"))
+PORT_TRIES = int(os.environ.get("PAD_PORT_TRIES", "10"))
 LOGIN = "/login"
 
 # Cargo package name in web/react-version/src-tauri/Cargo.toml
@@ -119,10 +120,26 @@ def launch_client(root: Path, base: str) -> subprocess.Popen | None:
     return subprocess.Popen([npm, "run", "tauri:dev"], **kwargs)
 
 
+def server_ready(base: str) -> bool:
+    # Checks FastAPI startup by hitting the openapi spec.
+    try:
+        with urllib.request.urlopen(f"{base}/openapi.json", timeout=2) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
+
+
+def wait_for_server(base: str, attempts: int = 60) -> bool:
+    for _ in range(attempts):
+        if server_ready(base):
+            return True
+        time.sleep(0.5)
+    return False
+
+
 def main() -> None:
     root = project_root()
     py = find_python(root)
-    base = f"http://{HOST}:{PORT}"
     dist = root / "web" / "react-version" / "dist"
     if not dist.is_dir():
         print(
@@ -132,18 +149,8 @@ def main() -> None:
 
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
-    cmd = [
-        str(py),
-        "-m",
-        "uvicorn",
-        "backend.app:app",
-        "--host",
-        HOST,
-        "--port",
-        str(PORT),
-    ]
-    proc = subprocess.Popen(cmd, cwd=root, env=env)
 
+    proc: subprocess.Popen | None = None
     tauri_proc: subprocess.Popen | None = None
 
     def kill(_sig=None, _frame=None):
@@ -153,44 +160,85 @@ def main() -> None:
                 tauri_proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 tauri_proc.kill()
-        proc.terminate()
-        try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc.kill()
+        if proc and proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
 
     signal.signal(signal.SIGINT, kill)
     if hasattr(signal, "SIGTERM"):
         signal.signal(signal.SIGTERM, kill)
 
     try:
-        for _ in range(60):
-            try:
-                urllib.request.urlopen(f"{base}/openapi.json", timeout=2)
-                break
-            except (urllib.error.URLError, OSError):
-                time.sleep(0.5)
-        else:
-            print(f"Server did not become ready. Check errors above. URL: {base}", file=sys.stderr)
-            kill()
-            sys.exit(1)
+        # Try multiple ports to avoid failures when 8000 is already used.
+        for port in range(PORT, PORT + PORT_TRIES):
+            base = f"http://{HOST}:{port}"
 
-        try:
-            tauri_proc = launch_client(root, base)
-        except LaunchError as e:
-            mode = launch_mode()
-            if mode == "tauri":
-                # Fresh machines often don't have Rust/Tauri set up; in that case,
-                # still open the app in a browser so the user isn't blocked.
-                print(str(e), file=sys.stderr)
-                print("Falling back to browser (install Tauri/Rust to launch desktop app).", file=sys.stderr)
-                webbrowser.open(f"{base}{LOGIN}")
-                tauri_proc = None
-            else:
-                print(str(e), file=sys.stderr)
-                kill()
-                sys.exit(1)
-        proc.wait()
+            # If something is already listening on this port, reuse it.
+            if server_ready(base):
+                try:
+                    tauri_proc = launch_client(root, base)
+                except LaunchError as e:
+                    mode = launch_mode()
+                    if mode == "tauri":
+                        print(str(e), file=sys.stderr)
+                        print("Falling back to browser (install Tauri/Rust to launch desktop app).", file=sys.stderr)
+                        webbrowser.open(f"{base}{LOGIN}")
+                        tauri_proc = None
+                    else:
+                        raise
+                if tauri_proc:
+                    tauri_proc.wait()
+                return
+
+            # Start uvicorn on this port.
+            cmd = [
+                str(py),
+                "-m",
+                "uvicorn",
+                "backend.app:app",
+                "--host",
+                HOST,
+                "--port",
+                str(port),
+            ]
+            proc = subprocess.Popen(cmd, cwd=root, env=env)
+
+            if not wait_for_server(base):
+                # Give it another try on the next port.
+                if proc and proc.poll() is None:
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                proc = None
+                continue
+
+            try:
+                tauri_proc = launch_client(root, base)
+            except LaunchError as e:
+                mode = launch_mode()
+                if mode == "tauri":
+                    # Fresh machines often don't have Rust/Tauri set up; in that case,
+                    # still open the app in a browser so the user isn't blocked.
+                    print(str(e), file=sys.stderr)
+                    print("Falling back to browser (install Tauri/Rust to launch desktop app).", file=sys.stderr)
+                    webbrowser.open(f"{base}{LOGIN}")
+                    tauri_proc = None
+                else:
+                    print(str(e), file=sys.stderr)
+                    kill()
+                    sys.exit(1)
+
+            # Keep the launcher alive as long as the backend is alive.
+            proc.wait()
+            return
+
+        print(f"Server did not become ready on ports {PORT}..{PORT + PORT_TRIES - 1}.", file=sys.stderr)
+        sys.exit(1)
     except KeyboardInterrupt:
         kill()
 

@@ -14,6 +14,17 @@ if "%PY%"=="" (
   set "PY=%ROOT_DIR%\.venv\Scripts\python.exe"
 )
 
+# Some fresh installs create a venv without `pip`. If so, bootstrap it via ensurepip.
+%PY% -m pip --version >nul 2>nul
+if errorlevel 1 (
+  echo Bootstrapping pip in venv (ensurepip)... 1>&2
+  "%PY%" -m ensurepip --upgrade --default-pip
+  if errorlevel 1 (
+    echo Could not bootstrap pip. Install system package: python3-pip (and python3-venv). 1>&2
+    exit /b 1
+  )
+)
+
 echo Installing Python dependencies... 1>&2
 "%PY%" -m pip install --upgrade pip
 "%PY%" -m pip install -r requirements.txt
@@ -28,7 +39,11 @@ if not exist "%DIST_INDEX%" (
     exit /b 1
   )
   pushd web\react-version
-  npm install
+  if exist package-lock.json (
+    npm ci --no-audit --no-fund
+  ) else (
+    npm install --no-audit --no-fund
+  )
   npm run build
   popd
 )
