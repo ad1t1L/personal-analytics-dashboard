@@ -6,6 +6,8 @@ Usage (from repo root): python launcher/start_dashboard.py
 Environment:
   PAD_LAUNCH=tauri|browser|none   (default: tauri)
   PAD_TAURI_BINARY=/path/to/app   optional; overrides auto-detected Tauri binary
+  PAD_WEBKIT_SAFE=1|0             (default: 1 on Linux) WebKitGTK workarounds for frozen/blank
+                                  webviews on Debian/Parrot/VMs. Set 0 if you want GPU path.
 """
 from __future__ import annotations
 
@@ -76,6 +78,20 @@ def launch_mode() -> str:
     return os.environ.get("PAD_LAUNCH", "tauri").strip().lower()
 
 
+def _env_flag(name: str, default: str = "1") -> bool:
+    v = os.environ.get(name, default).strip().lower()
+    return v not in ("0", "false", "no", "off")
+
+
+def env_for_tauri_child() -> dict[str, str]:
+    """Linux WebKitGTK + DMA-BUF often freezes or half-blanks the webview on Debian/Parrot VMs."""
+    env = os.environ.copy()
+    if sys.platform.startswith("linux") and _env_flag("PAD_WEBKIT_SAFE", "1"):
+        env.setdefault("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
+        env.setdefault("WEBKIT_DISABLE_COMPOSITING_MODE", "1")
+    return env
+
+
 def launch_client(root: Path, base: str) -> subprocess.Popen | None:
     mode = launch_mode()
     if mode == "none":
@@ -91,11 +107,11 @@ def launch_client(root: Path, base: str) -> subprocess.Popen | None:
         p = Path(custom).expanduser()
         if not p.is_file():
             raise LaunchError(f"PAD_TAURI_BINARY not found: {p}")
-        return subprocess.Popen([str(p)], cwd=str(root), env=os.environ.copy())
+        return subprocess.Popen([str(p)], cwd=str(root), env=env_for_tauri_child())
 
     for cand in _tauri_binary_candidates(root):
         if cand.is_file():
-            return subprocess.Popen([str(cand)], cwd=str(root), env=os.environ.copy())
+            return subprocess.Popen([str(cand)], cwd=str(root), env=env_for_tauri_child())
 
     react = root / "web" / "react-version"
     npm = shutil.which("npm")
@@ -106,7 +122,7 @@ def launch_client(root: Path, base: str) -> subprocess.Popen | None:
             "or install Node/npm and re-run (dev mode will run `npm run tauri:dev`)."
         )
 
-    env = os.environ.copy()
+    env = env_for_tauri_child()
     kwargs: dict = {
         "cwd": str(react),
         "env": env,

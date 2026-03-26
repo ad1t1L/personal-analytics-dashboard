@@ -244,6 +244,7 @@ func launchTauri(root string) error {
 	if p := os.Getenv("PAD_TAURI_BINARY"); p != "" {
 		cmd := exec.Command(p)
 		cmd.Dir = root
+		cmd.Env = tauriEnv()
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Start(); err != nil {
@@ -258,6 +259,7 @@ func launchTauri(root string) error {
 		if st, err := os.Stat(bin); err == nil && !st.IsDir() {
 			cmd := exec.Command(bin)
 			cmd.Dir = root
+			cmd.Env = tauriEnv()
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			if err := cmd.Start(); err != nil {
@@ -276,7 +278,7 @@ func launchTauri(root string) error {
 	}
 	cmd := exec.Command(npm, "run", "tauri:dev")
 	cmd.Dir = react
-	cmd.Env = os.Environ()
+	cmd.Env = tauriEnv()
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
@@ -285,4 +287,27 @@ func launchTauri(root string) error {
 	}
 	tauriChild = cmd
 	return nil
+}
+
+// tauriEnv adds WebKitGTK workarounds on Linux (frozen / half-blank webviews on Debian/Parrot VMs).
+func tauriEnv() []string {
+	env := os.Environ()
+	if runtime.GOOS != "linux" {
+		return env
+	}
+	switch strings.ToLower(strings.TrimSpace(getenv("PAD_WEBKIT_SAFE", "1"))) {
+	case "0", "false", "no", "off":
+		return env
+	}
+	return appendEnvIfMissing(appendEnvIfMissing(env, "WEBKIT_DISABLE_DMABUF_RENDERER", "1"), "WEBKIT_DISABLE_COMPOSITING_MODE", "1")
+}
+
+func appendEnvIfMissing(env []string, key, val string) []string {
+	prefix := key + "="
+	for _, e := range env {
+		if strings.HasPrefix(e, prefix) {
+			return env
+		}
+	}
+	return append(env, prefix+val)
 }
