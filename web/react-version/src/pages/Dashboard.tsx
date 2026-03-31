@@ -333,10 +333,27 @@ export default function Dashboard() {
   const [eodStressMorning, setEodStressMorning] = useState<number>(0);
   const [eodStressAfternoon, setEodStressAfternoon] = useState<number>(0);
   const [eodStressEvening, setEodStressEvening] = useState<number>(0);
+  const [eodBoredomMorning, setEodBoredomMorning] = useState<number>(0);
+  const [eodBoredomAfternoon, setEodBoredomAfternoon] = useState<number>(0);
+  const [eodBoredomEvening, setEodBoredomEvening] = useState<number>(0);
   const [eodOverall, setEodOverall] = useState<number>(0);
   const [eodNotes, setEodNotes] = useState("");
   const [submittingEOD, setSubmittingEOD] = useState(false);
   const [eodSuccess, setEodSuccess] = useState(false);
+
+  // ── Schedule state ────────────────────────────────────────────────────────
+  type ScheduledItem = {
+    task_id: number; title: string; start_time: string; end_time: string;
+    time_of_day: string; energy_level: string; task_type: string;
+  };
+  type ScheduleData = {
+    date: string;
+    scheduled: ScheduledItem[];
+    overflow: { task_id: number; title: string; energy_level: string }[];
+    summary: { total_tasks: number; scheduled_count: number; overflow_count: number; total_hours: number };
+  };
+  const [schedule, setSchedule] = useState<ScheduleData | null>(null);
+  const [scheduleLoading, setScheduleLoading] = useState(false);
   const eodModalRef = useRef<HTMLDivElement>(null);
 
   const [showEditModal, setShowEditModal] = useState(false);
@@ -352,6 +369,7 @@ export default function Dashboard() {
   const [dragTaskId, setDragTaskId] = useState<number | null>(null);
   const [dayPopup, setDayPopup] = useState<string | null>(null);
   const dayPopupRef = useRef<HTMLDivElement>(null);
+  const [dayPopupSchedule, setDayPopupSchedule] = useState<ScheduleData | null>(null);
 
   const today = new Date();
   const [calYear, setCalYear] = useState(today.getFullYear());
@@ -382,7 +400,18 @@ export default function Dashboard() {
     finally { setLoading(false); }
   }
 
-  useEffect(() => { if (session) fetchTasks(); }, [session]);
+  async function fetchSchedule() {
+    const t = sessionStorage.getItem("access_token");
+    if (!t) return;
+    setScheduleLoading(true);
+    try {
+      const res = await fetch(`${API}/schedules/today`, { headers: { Authorization: `Bearer ${t}` } });
+      if (res.ok) setSchedule(await res.json());
+    } catch {}
+    finally { setScheduleLoading(false); }
+  }
+
+  useEffect(() => { if (session) { fetchTasks(); fetchSchedule(); } }, [session]);
 
   const fetch2FAStatus = useCallback(async () => {
     const token = sessionStorage.getItem("access_token");
@@ -408,6 +437,16 @@ export default function Dashboard() {
   useModalDismiss(showAddModal, modalRef, () => setShowAddModal(false));
   useModalDismiss(showEditModal, editModalRef, () => setShowEditModal(false));
   useModalDismiss(!!dayPopup, dayPopupRef, () => setDayPopup(null));
+
+  useEffect(() => {
+    if (!dayPopup) { setDayPopupSchedule(null); return; }
+    const t = sessionStorage.getItem("access_token");
+    if (!t) return;
+    fetch(`${API}/schedules/date/${dayPopup}`, { headers: { Authorization: `Bearer ${t}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => setDayPopupSchedule(data ?? null))
+      .catch(() => setDayPopupSchedule(null));
+  }, [dayPopup]);
 
   function openAddModal(prefillDate?: string, prefillHour?: number) {
     setForm(blankForm(prefillDate, prefillHour));
@@ -696,6 +735,9 @@ export default function Dashboard() {
     setEodStressMorning(0);
     setEodStressAfternoon(0);
     setEodStressEvening(0);
+    setEodBoredomMorning(0);
+    setEodBoredomAfternoon(0);
+    setEodBoredomEvening(0);
     setEodOverall(0);
     setEodNotes("");
     setEodSuccess(false);
@@ -708,11 +750,14 @@ export default function Dashboard() {
       if (res.ok) {
         const data = await res.json();
         if (data.exists && data.data) {
-          setEodStressMorning(data.data.stress_morning   || 0);
+          setEodStressMorning(data.data.stress_morning     || 0);
           setEodStressAfternoon(data.data.stress_afternoon || 0);
-          setEodStressEvening(data.data.stress_evening   || 0);
-          setEodOverall(data.data.overall_rating         || 0);
-          setEodNotes(data.data.notes                    || "");
+          setEodStressEvening(data.data.stress_evening     || 0);
+          setEodBoredomMorning(data.data.boredom_morning   || 0);
+          setEodBoredomAfternoon(data.data.boredom_afternoon || 0);
+          setEodBoredomEvening(data.data.boredom_evening   || 0);
+          setEodOverall(data.data.overall_rating           || 0);
+          setEodNotes(data.data.notes                      || "");
         }
       }
     } catch {}
@@ -728,15 +773,20 @@ export default function Dashboard() {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` },
         body: JSON.stringify({
-          date:             toDateStr(new Date()),
-          stress_morning:   eodStressMorning   || null,
-          stress_afternoon: eodStressAfternoon || null,
-          stress_evening:   eodStressEvening   || null,
-          overall_rating:   eodOverall         || null,
-          notes:            eodNotes           || null,
+          date:              toDateStr(new Date()),
+          stress_morning:    eodStressMorning    || null,
+          boredom_morning:   eodBoredomMorning   || null,
+          stress_afternoon:  eodStressAfternoon  || null,
+          boredom_afternoon: eodBoredomAfternoon || null,
+          stress_evening:    eodStressEvening    || null,
+          boredom_evening:   eodBoredomEvening   || null,
+          overall_rating:    eodOverall          || null,
+          notes:             eodNotes            || null,
         }),
       });
       setEodSuccess(true);
+      // Refresh schedule — ML weights just updated, tomorrow's schedule changes
+      fetchSchedule();
       setTimeout(() => setShowEODModal(false), 1400);
     } catch {}
     setSubmittingEOD(false);
@@ -842,8 +892,6 @@ export default function Dashboard() {
   function DayPopup() {
     if (!dayPopup) return null;
     const dayTasks = tasksForDate(dayPopup);
-    const allDayTasks = dayTasks.filter(t => !(t.task_type === "fixed" && t.fixed_start) && !(t.task_type === "semi" && t.fixed_end));
-    const timedTasks = dayTasks.filter(t => (t.task_type === "fixed" && t.fixed_start) || (t.task_type === "semi" && t.fixed_end));
 
     const PX_PER_MIN = 1.2;
     const HOUR_HEIGHT = 60 * PX_PER_MIN;
@@ -858,24 +906,58 @@ export default function Dashboard() {
       return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
     }
 
-    // Compute overlap columns
-    type PositionedTask = Task & { col: number; totalCols: number; startMin: number; endMin: number };
-    const positioned: PositionedTask[] = timedTasks.map(t => {
-      let startMin: number;
-      let endMin: number;
-      if (t.task_type === "semi" && t.fixed_end && !t.fixed_start) {
-        // due_by: show as a block ending at due time, sized by duration
-        endMin = timeToMinutes(t.fixed_end);
-        startMin = Math.max(endMin - t.duration_minutes, START_HOUR * 60);
-      } else {
-        startMin = timeToMinutes(t.fixed_start!);
-        endMin = t.fixed_end ? timeToMinutes(t.fixed_end) : startMin + t.duration_minutes;
+    // Build a lookup of task_id -> scheduled times from the ML schedule
+    const scheduleMap = new Map<number, { start_time: string; end_time: string }>();
+    if (dayPopupSchedule) {
+      for (const item of dayPopupSchedule.scheduled) {
+        if (item.start_time && item.end_time) {
+          scheduleMap.set(item.task_id, { start_time: item.start_time, end_time: item.end_time });
+        }
       }
-      return { ...t, startMin, endMin, col: 0, totalCols: 1 };
-    }).sort((a, b) => a.startMin - b.startMin);
+    }
 
-    // Assign columns for overlaps
-    const cols: number[] = [];
+    // Categorize tasks:
+    // - Fixed tasks with explicit start time -> timed grid (use fixed_start/fixed_end)
+    // - Semi/flexible tasks that have a ML-assigned slot -> timed grid (use schedule times)
+    // - Semi tasks with a manual fixed_end but no ML slot -> timed grid (use fixed_end)
+    // - Everything else (no time info at all) -> all-day strip
+    type PositionedTask = Task & { col: number; totalCols: number; startMin: number; endMin: number; timeLabel: string };
+
+    const timedTasksRaw: { task: Task; startMin: number; endMin: number; timeLabel: string }[] = [];
+    const allDayTasksList: Task[] = [];
+
+    for (const t of dayTasks) {
+      const scheduled = scheduleMap.get(t.id);
+
+      if (t.task_type === "fixed" && t.fixed_start) {
+        // Hard-scheduled fixed task
+        const startMin = timeToMinutes(t.fixed_start);
+        const endMin = t.fixed_end ? timeToMinutes(t.fixed_end) : startMin + t.duration_minutes;
+        timedTasksRaw.push({ task: t, startMin, endMin, timeLabel: `${to12h(t.fixed_start)}–${t.fixed_end ? to12h(t.fixed_end) : "?"}` });
+      } else if (scheduled) {
+        // ML placed this task in a specific slot
+        const startMin = timeToMinutes(scheduled.start_time);
+        const endMin = timeToMinutes(scheduled.end_time);
+        timedTasksRaw.push({ task: t, startMin, endMin, timeLabel: `${to12h(scheduled.start_time)}–${to12h(scheduled.end_time)}` });
+      } else if (t.task_type === "semi" && t.fixed_end && !t.fixed_start) {
+        // Due-by task with a manual due time but no ML slot (e.g. future date)
+        const endMin = timeToMinutes(t.fixed_end);
+        const startMin = Math.max(endMin - t.duration_minutes, START_HOUR * 60);
+        timedTasksRaw.push({ task: t, startMin, endMin, timeLabel: `due by ${to12h(t.fixed_end)}` });
+      } else {
+        // No time info at all — show as all-day
+        allDayTasksList.push(t);
+      }
+    }
+
+    // Sort timed tasks by start time
+    timedTasksRaw.sort((a, b) => a.startMin - b.startMin);
+
+    // Assign overlap columns
+    const positioned: PositionedTask[] = timedTasksRaw.map(({ task, startMin, endMin, timeLabel }) => ({
+      ...task, startMin, endMin, timeLabel, col: 0, totalCols: 1,
+    }));
+
     positioned.forEach((task, i) => {
       const usedCols = new Set<number>();
       for (let j = 0; j < i; j++) {
@@ -886,10 +968,8 @@ export default function Dashboard() {
       let col = 0;
       while (usedCols.has(col)) col++;
       task.col = col;
-      cols.push(col);
     });
 
-    // Compute totalCols per overlap group
     positioned.forEach((task, i) => {
       let maxCol = task.col;
       positioned.forEach((other, j) => {
@@ -908,10 +988,10 @@ export default function Dashboard() {
             <button className="modal-close" onClick={() => setDayPopup(null)}>✕</button>
           </div>
 
-          {allDayTasks.length > 0 && (
+          {allDayTasksList.length > 0 && (
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: "0.68rem", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>All day</div>
-              {allDayTasks.map(t => (
+              <div style={{ fontSize: "0.68rem", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>No specific time</div>
+              {allDayTasksList.map(t => (
                 <div key={t.id} className="day-allday-chip" style={{ borderLeftColor: importanceDot(t.importance) }}>
                   <span style={{ fontWeight: 600, fontSize: "0.84rem" }}>{t.title}</span>
                   <span style={{ fontSize: "0.74rem", color: "var(--muted)", marginLeft: 10 }}>{importanceLabel(t.importance)} · {formatDuration(t.duration_minutes)}</span>
@@ -968,7 +1048,7 @@ export default function Dashboard() {
                   >
                     <div style={{ fontWeight: 700, fontSize: "0.8rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.title}</div>
                     {heightPx > 30 && <div style={{ fontSize: "0.7rem", color: "var(--muted)", marginTop: 2 }}>
-                      {t.task_type === "semi" ? `due by ${to12h(t.fixed_end!)}` : `${to12h(t.fixed_start!)}–${t.fixed_end ? to12h(t.fixed_end) : "?"}`}
+                      {t.timeLabel}
                     </div>}
                   </div>
                 );
@@ -1190,6 +1270,68 @@ export default function Dashboard() {
             </div>
           </section>
 
+          <section className="panel schedule-panel">
+            <div className="panel-head">
+              <div>
+                <h1 className="panel-title">Today's Schedule</h1>
+                <p className="panel-sub">
+                  {schedule ? `${schedule.summary.scheduled_count} tasks · ${schedule.summary.total_hours}h planned` : "ML-optimized for your day"}
+                </p>
+              </div>
+              <button className="ghost-btn" type="button" onClick={fetchSchedule} style={{ fontSize: "0.82rem" }}>↻ Refresh</button>
+            </div>
+
+            {scheduleLoading ? (
+              <div className="empty" style={{ padding: "24px 0" }}>Building your schedule…</div>
+            ) : !schedule ? (
+              <div className="empty" style={{ padding: "24px 0" }}>
+                <div style={{ fontSize: "1.5rem", marginBottom: 8 }}>📅</div>
+                Could not load schedule. Make sure the backend is running.
+              </div>
+            ) : schedule.scheduled.length === 0 && schedule.overflow.length === 0 ? (
+              <div className="empty" style={{ padding: "24px 0" }}>
+                <div style={{ fontSize: "1.5rem", marginBottom: 8 }}>✅</div>
+                No tasks to schedule today. Add some tasks to get started.
+              </div>
+            ) : (
+              <div className="schedule-list">
+                {schedule.scheduled.map((item) => {
+                  const energyIcon = item.energy_level === "high" ? "🔥" : item.energy_level === "medium" ? "⚡" : "🌿";
+                  const todColor = item.time_of_day === "morning" ? "#ffd43b" : item.time_of_day === "afternoon" ? "#74c0fc" : "#b197fc";
+                  return (
+                    <div key={item.task_id} className="schedule-item">
+                      <div className="schedule-time-col">
+                        <span className="schedule-start">{item.start_time}</span>
+                        <span className="schedule-end">{item.end_time}</span>
+                      </div>
+                      <div className="schedule-bar" style={{ background: todColor }} />
+                      <div className="schedule-info">
+                        <div className="schedule-title">{item.title}</div>
+                        <div className="schedule-meta">
+                          <span>{energyIcon} {item.energy_level}</span>
+                          <span>•</span>
+                          <span style={{ color: todColor, fontWeight: 600 }}>{item.time_of_day}</span>
+                          {item.task_type === "fixed" && <><span>•</span><span style={{ color: "var(--accent2)" }}>Fixed</span></>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {schedule.overflow.length > 0 && (
+                  <div className="schedule-overflow">
+                    <div className="schedule-overflow-label">⚠ Didn't fit today</div>
+                    {schedule.overflow.map((item) => (
+                      <div key={item.task_id} className="schedule-overflow-item">
+                        <span>{item.title}</span>
+                        <span style={{ color: "var(--muted)", fontSize: "0.78rem" }}>{item.energy_level}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+
           <section className="panel calendar-panel">
             <div className="cal-view-switcher">
               {(["month","week","agenda"] as CalView[]).map(v => (
@@ -1362,6 +1504,27 @@ export default function Dashboard() {
                   <div className="stress-period-row">
                     <span className="stress-period-label">🌙 Evening</span>
                     <StressScale value={eodStressEvening} onChange={setEodStressEvening} />
+                  </div>
+                </div>
+
+                <div className="survey-section">
+                  <div className="survey-label">Boredom / engagement by time of day</div>
+                  <div className="stress-hint-row">
+                    <span className="stress-hint">1 = Very engaged</span>
+                    <span className="stress-hint">5 = Very bored</span>
+                  </div>
+
+                  <div className="stress-period-row">
+                    <span className="stress-period-label">🌅 Morning</span>
+                    <StressScale value={eodBoredomMorning} onChange={setEodBoredomMorning} />
+                  </div>
+                  <div className="stress-period-row">
+                    <span className="stress-period-label">☀️ Afternoon</span>
+                    <StressScale value={eodBoredomAfternoon} onChange={setEodBoredomAfternoon} />
+                  </div>
+                  <div className="stress-period-row">
+                    <span className="stress-period-label">🌙 Evening</span>
+                    <StressScale value={eodBoredomEvening} onChange={setEodBoredomEvening} />
                   </div>
                 </div>
 

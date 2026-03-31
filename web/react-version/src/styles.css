@@ -684,3 +684,18 @@ header .user-info { display: flex; align-items: center; gap: 10px; flex-shrink: 
 .checkbox-wrapper-26 input[type="checkbox"]:checked + label:before { width: 0; height: 0; }
 .checkbox-wrapper-26 input[type="checkbox"]:checked + label .tick_mark:before,
 .checkbox-wrapper-26 input[type="checkbox"]:checked + label .tick_mark:after { transform: translate(0); opacity: 1; }
+/* ── Schedule panel ─────────────────────────────────────────────────── */
+.schedule-panel { min-width: 0; }
+.schedule-list { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.schedule-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--surface2); border-radius: 10px; border: 1px solid var(--border); }
+.schedule-time-col { display: flex; flex-direction: column; align-items: flex-end; min-width: 52px; flex-shrink: 0; }
+.schedule-start { font-size: 0.85rem; font-weight: 700; color: var(--text); }
+.schedule-end { font-size: 0.72rem; color: var(--muted); }
+.schedule-bar { width: 3px; height: 36px; border-radius: 2px; flex-shrink: 0; opacity: 0.8; }
+.schedule-info { flex: 1; min-width: 0; }
+.schedule-title { font-weight: 600; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.schedule-meta { display: flex; gap: 6px; align-items: center; font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+.schedule-overflow { margin-top: 14px; padding: 10px 12px; background: rgba(255,107,107,.06); border: 1px solid rgba(255,107,107,.2); border-radius: 10px; }
+.schedule-overflow-label { font-size: 0.75rem; font-weight: 700; color: #ff6b6b; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+.schedule-overflow-item { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 0.85rem; border-top: 1px solid rgba(255,107,107,.1); }
+.schedule-overflow-item:first-of-type { border-top: none; }
