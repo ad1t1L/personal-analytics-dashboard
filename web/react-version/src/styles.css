@@ -25,9 +25,14 @@ body {
 /* ── Header ── */
 header {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 0 28px; height: 58px; min-height: 58px;
+  padding: 8px 28px;
+  min-height: 58px;
+  height: auto;
+  flex-wrap: wrap;
+  row-gap: 8px;
   background: var(--surface); border-bottom: 1px solid var(--border);
   position: sticky; top: 0; z-index: 100; gap: 12px;
+  box-sizing: border-box;
 }
 header .brand {
   font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.1rem;
@@ -35,7 +40,9 @@ header .brand {
 }
 header .user-info {
   display: flex; align-items: center; justify-content: flex-end;
-  gap: 10px; flex-shrink: 0; flex-wrap: wrap; row-gap: 6px;
+  gap: 8px; flex-shrink: 1; flex-wrap: wrap; row-gap: 6px;
+  min-width: 0;
+  max-width: 100%;
 }
 .header-greeting { font-size: 0.85rem; color: var(--muted); white-space: nowrap; }
 
@@ -721,6 +728,35 @@ header .user-info {
   background: rgba(108, 99, 255, 0.2);
   border-color: var(--accent);
   box-shadow: 0 0 24px rgba(108, 99, 255, 0.25);
+}
+
+/* Native Tauri floating window — high visibility (header / sidebar / panel) */
+.widget-show-btn {
+  padding: 8px 16px;
+  border-radius: 9px;
+  border: 1px solid rgba(56, 217, 169, 0.45);
+  background: linear-gradient(135deg, rgba(56, 217, 169, 0.18), rgba(108, 99, 255, 0.12));
+  color: var(--accent2);
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--trans);
+  white-space: nowrap;
+  box-shadow: 0 0 0 1px rgba(56, 217, 169, 0.12) inset;
+}
+.widget-show-btn:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 4px 18px rgba(56, 217, 169, 0.22);
+}
+.widget-show-btn--sidebar {
+  width: 100%;
+  margin-top: 8px;
+  text-align: left;
+}
+.widget-show-btn--panel {
+  font-size: 0.84rem;
+  padding: 8px 14px;
 }
 
 .tasks-glance-root {

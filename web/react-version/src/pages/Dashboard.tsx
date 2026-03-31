@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import TasksAtAGlanceWidget from "../components/TasksAtAGlanceWidget.tsx";
-import { emitTasksUpdatedIfTauri, isTauriRuntime, syncTauriWidgetToken } from "../tauriWidgetBridge.ts";
+import { emitTasksUpdatedIfTauri, syncTauriWidgetToken } from "../tauriWidgetBridge.ts";
 import { showWidgetRobust } from "../widgetInvoke.ts";
 
 const API = "http://localhost:8000";
@@ -803,6 +803,16 @@ export default function Dashboard() {
     setSubmittingEOD(false);
   }
 
+  async function openFloatingWidget() {
+    try {
+      await showWidgetRobust();
+    } catch {
+      setErr(
+        "Show widget only works in the desktop (Tauri) app. From the repo run ./start-dashboard.sh, or: cd web/react-version && npm run build && npm run tauri:dev"
+      );
+    }
+  }
+
   async function signOut() {
     const rt = sessionStorage.getItem("refresh_token");
     if (rt) { try { await fetch(`${API}/auth/logout`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refresh_token: rt }) }); } catch {} }
@@ -1206,18 +1216,14 @@ export default function Dashboard() {
         <div className="brand">📋 PlannerHub</div>
         <div className="user-info">
           <span className="header-greeting">👋 {displayName}</span>
-          {isTauriRuntime() && (
-            <button
-              type="button"
-              className="glance-btn"
-              onClick={() => {
-                showWidgetRobust().catch(() => {});
-              }}
-              title="Open the small floating task window (tray: Show Widget)"
-            >
-              📌 Float widget
-            </button>
-          )}
+          <button
+            type="button"
+            className="widget-show-btn"
+            onClick={() => void openFloatingWidget()}
+            title="Opens the small floating task window (tray: Show Widget)"
+          >
+            Show widget
+          </button>
           <button
             type="button"
             className="glance-btn"
@@ -1252,6 +1258,14 @@ export default function Dashboard() {
         <aside className="sidebar">
           <div className="side-title">Dashboard</div>
           <button className="side-pill" type="button">Taskboard</button>
+          <button
+            type="button"
+            className="widget-show-btn widget-show-btn--sidebar"
+            onClick={() => void openFloatingWidget()}
+            title="Opens the floating task window"
+          >
+            Show widget
+          </button>
           <button className="side-link" type="button" onClick={() => nav("/account")}>Account settings</button>
           <button className="side-link side-link-danger" type="button" onClick={signOut}>Sign out</button>
         </aside>
@@ -1263,7 +1277,15 @@ export default function Dashboard() {
                 <h1 className="panel-title">My Tasks</h1>
                 <p className="panel-sub">{dedupeForList(tasks).length} task{dedupeForList(tasks).length !== 1 ? "s" : ""} total</p>
               </div>
-              <div style={{ display: "flex", gap: 8 }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <button
+                  type="button"
+                  className="widget-show-btn widget-show-btn--panel"
+                  onClick={() => void openFloatingWidget()}
+                  title="Floating task window"
+                >
+                  Show widget
+                </button>
                 <button className="ghost-btn" type="button" onClick={fetchTasks}>↻ Refresh</button>
                 <button className="primary-btn" type="button" onClick={() => openAddModal()}>+ Add Task</button>
               </div>

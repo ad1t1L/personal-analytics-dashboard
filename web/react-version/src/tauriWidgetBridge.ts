@@ -20,6 +20,14 @@ export async function emitTasksUpdatedIfTauri(): Promise<void> {
   }
 }
 
+/**
+ * True when the UI runs inside the Tauri webview (not a normal browser tab).
+ * Tauri v1/v2 use different globals; `TAURI_ENV_PLATFORM` is set by the Tauri+Vite toolchain.
+ */
 export function isTauriRuntime(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+  if (typeof window === "undefined") return false;
+  const w = window as Window & { __TAURI__?: unknown; __TAURI_INTERNALS__?: unknown };
+  if (w.__TAURI_INTERNALS__ !== undefined || w.__TAURI__ !== undefined) return true;
+  if (import.meta.env?.TAURI_ENV_PLATFORM) return true;
+  return false;
 }
