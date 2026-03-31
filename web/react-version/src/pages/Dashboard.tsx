@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 const API = "http://localhost:8000";
@@ -60,6 +60,31 @@ function toDateStr(d: Date) {
 function formatDateLabel(ds: string) {
   const [y, m, d] = ds.split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+}
+
+function calcDuration(start: string, end: string): number | null {
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  const computed = (eh * 60 + em) - (sh * 60 + sm);
+  return computed > 0 ? computed : null;
+}
+
+// Converts raw backend error responses into friendly user-facing messages
+function friendlyError(raw: string, fallback: string): string {
+  try {
+    const data = JSON.parse(raw);
+    const detail = data?.detail;
+    if (typeof detail === "string") {
+      if (detail.includes("fixed_start") || detail.includes("fixed_end")) return "Please fill in both a start time and end time.";
+      if (detail.includes("recurrence_days")) return "Please select at least one day for weekly recurrence.";
+      if (detail.includes("title")) return "Task name cannot be empty.";
+      if (detail.includes("task_type")) return "Please select a valid task type.";
+      if (detail.includes("energy_level")) return "Please select a valid energy level.";
+      if (detail.includes("importance")) return "Importance must be between 1 and 5.";
+      return detail;
+    }
+  } catch {}
+  return fallback;
 }
 
 const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -145,7 +170,7 @@ function blankForm(prefillDate?: string, prefillHour?: number) {
     fixed_end: prefillHour !== undefined ? `${String(Math.min(prefillHour+1,23)).padStart(2,"0")}:00` : "",
     location: "",
     deadline: prefillDate ?? "",
-    duration_minutes: 30,
+    duration_minutes: prefillHour !== undefined ? 60 : 30,
     importance: 3,
     energy_level: "moderate",
     preferred_time: "none",
@@ -172,6 +197,29 @@ function TaskFormFields({ f, setF, err: formErr, showOpt, setShowOpt, showRec, s
     const days = f.recurrence_days.includes(d) ? f.recurrence_days.filter(x => x !== d) : [...f.recurrence_days, d];
     upd({ recurrence_days: days });
   }
+
+  // For set_time tasks: auto-calculate duration when start or end changes
+  const isSetTime = f.task_type === "set_time";
+  const durationAutoFilled = isSetTime && !!(f.fixed_start && f.fixed_end);
+
+  function handleStartChange(newStart: string) {
+    const patch: Partial<TaskForm> = { fixed_start: newStart };
+    if (newStart && f.fixed_end) {
+      const computed = calcDuration(newStart, f.fixed_end);
+      if (computed) patch.duration_minutes = computed;
+    }
+    upd(patch);
+  }
+
+  function handleEndChange(newEnd: string) {
+    const patch: Partial<TaskForm> = { fixed_end: newEnd };
+    if (f.fixed_start && newEnd) {
+      const computed = calcDuration(f.fixed_start, newEnd);
+      if (computed) patch.duration_minutes = computed;
+    }
+    upd(patch);
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
       {formErr && <div className="error">{formErr}</div>}
@@ -199,11 +247,11 @@ function TaskFormFields({ f, setF, err: formErr, showOpt, setShowOpt, showRec, s
           <div className="modal-row">
             <div className="modal-field">
               <label>Start time</label>
-              <input className="input" type="time" value={f.fixed_start} onChange={e => upd({ fixed_start: e.target.value })} />
+              <input className="input" type="time" value={f.fixed_start} onChange={e => handleStartChange(e.target.value)} />
             </div>
             <div className="modal-field">
               <label>End time</label>
-              <input className="input" type="time" value={f.fixed_end} onChange={e => upd({ fixed_end: e.target.value })} />
+              <input className="input" type="time" value={f.fixed_end} onChange={e => handleEndChange(e.target.value)} />
             </div>
           </div>
           <div className="modal-field">
@@ -228,8 +276,23 @@ function TaskFormFields({ f, setF, err: formErr, showOpt, setShowOpt, showRec, s
         <>
           <div className="modal-row">
             <div className="modal-field">
-              <label>Duration (minutes)</label>
-              <input className="input" type="number" min={5} max={600} value={f.duration_minutes || ""} onChange={e => upd({ duration_minutes: parseInt(e.target.value) || 0 })} onBlur={() => { if (!f.duration_minutes || f.duration_minutes < 5) upd({ duration_minutes: 5 }); }} />
+              <label>
+                Duration (minutes)
+                {durationAutoFilled && (
+                  <span style={{ fontSize: "0.7rem", color: "var(--muted)", fontWeight: 400, marginLeft: 6 }}>auto-filled</span>
+                )}
+              </label>
+              <input
+                className="input"
+                type="number"
+                min={5}
+                max={600}
+                value={f.duration_minutes || ""}
+                readOnly={durationAutoFilled}
+                style={durationAutoFilled ? { opacity: 0.55, cursor: "not-allowed" } : {}}
+                onChange={e => upd({ duration_minutes: parseInt(e.target.value) || 0 })}
+                onBlur={() => { if (!durationAutoFilled && (!f.duration_minutes || f.duration_minutes < 5)) upd({ duration_minutes: 5 }); }}
+              />
               {f.duration_minutes >= 60 && <div style={{ fontSize: "0.75rem", color: "var(--accent2)", marginTop: 4 }}>{formatDuration(f.duration_minutes)}</div>}
             </div>
             <div className="modal-field">
@@ -465,9 +528,9 @@ export default function Dashboard() {
       fixed_start: t.fixed_start ?? "", fixed_end: t.fixed_end ?? "",
       location: t.location ?? "", deadline: t.deadline ?? "",
       duration_minutes: t.duration_minutes, importance: t.importance,
-      energy_level: reverseEnergyMap[t.energy_level ?? "moderate"] ?? t.energy_level ?? "moderate",
+      energy_level: reverseEnergyMap[t.energy_level ?? "medium"] ?? t.energy_level ?? "moderate",
       preferred_time: t.preferred_time ?? "none",
-      recurrence: reverseRecurMap[t.recurrence ?? "once"] ?? t.recurrence ?? "once",
+      recurrence: reverseRecurMap[t.recurrence ?? "none"] ?? t.recurrence ?? "once",
       recurrence_days: t.recurrence_days ? t.recurrence_days.split(",").map(Number) : [],
     });
     setEditErr(null); setShowEditOptional(false); setShowEditRecurrence(false);
@@ -475,22 +538,9 @@ export default function Dashboard() {
   }
 
   function formToPayload(f: TaskForm) {
-
-  const energyMap: Record<string, string> = {
-    "light":    "low",
-    "moderate": "medium",
-    "intense":  "high",
-  };
-  const taskTypeMap: Record<string, string> = {
-    "set_time": "fixed",
-    "due_by":   "semi",
-    "flexible": "flexible",
-  };
-  const recurrenceMap: Record<string, string> = {
-    "once":   "none",
-    "daily":  "daily",
-    "weekly": "weekly",
-  };
+    const energyMap: Record<string, string> = { "light": "low", "moderate": "medium", "intense": "high" };
+    const taskTypeMap: Record<string, string> = { "set_time": "fixed", "due_by": "semi", "flexible": "flexible" };
+    const recurrenceMap: Record<string, string> = { "once": "none", "daily": "daily", "weekly": "weekly" };
 
     return {
       title: f.title.trim(),
@@ -502,47 +552,42 @@ export default function Dashboard() {
       fixed_end: (f.task_type === "set_time" || f.task_type === "due_by") ? (f.fixed_end || null) : null,
       location: f.task_type === "set_time" ? (f.location || null) : null,
       energy_level: energyMap[f.energy_level]  ?? f.energy_level,
-      preferred_time: f.preferred_time,
+      preferred_time: f.preferred_time || "none",
       recurrence:   recurrenceMap[f.recurrence] ?? f.recurrence,
       recurrence_days: f.recurrence === "weekly" && f.recurrence_days.length > 0 ? f.recurrence_days.join(",") : null,
     };
   }
 
-  // Generate list of YYYY-MM-DD dates for recurrence copies
   function getRecurrenceDates(f: TaskForm): string[] {
     const baseDate = f.deadline || toDateStr(today);
     const [y, mo, d] = baseDate.split("-").map(Number);
     const start = new Date(y, mo - 1, d);
-    const dates: string[] = [];
 
-    if (f.recurrence === "once" || !f.recurrence) {
-      return [baseDate];
-    } else if (f.recurrence === "daily") {
-      for (let i = 0; i < 30; i++) {
-        const date = addDays(start, i);
-        dates.push(toDateStr(date));
-      }
-    } else if (f.recurrence === "weekly") {
-      // recurrence_days are 0=Mon..6=Sun (our WEEKDAY_LABELS order)
-      // JS getDay() is 0=Sun..6=Sat, so map: our 0(Mon)=JS 1, our 6(Sun)=JS 0
-      const jsWeekdays = f.recurrence_days.map(d => d === 6 ? 0 : d + 1);
-      for (let i = 0; i < 30; i++) {
-        const date = addDays(start, i);
-        if (jsWeekdays.includes(date.getDay())) {
-          dates.push(toDateStr(date));
-        }
-      }
+    if (f.recurrence === "once" || !f.recurrence) return [baseDate];
+
+    if (f.recurrence === "daily") {
+      return Array.from({ length: 30 }, (_, i) => toDateStr(addDays(start, i)));
     }
-    return dates;
+
+    if (f.recurrence === "weekly") {
+      if (f.recurrence_days.length === 0) return [];
+      const jsWeekdays = f.recurrence_days.map(d => d === 6 ? 0 : d + 1);
+      const dates: string[] = [];
+      for (let i = 0; i < 30; i++) {
+        const date = addDays(start, i);
+        if (jsWeekdays.includes(date.getDay())) dates.push(toDateStr(date));
+      }
+      return dates;
+    }
+
+    return [baseDate];
   }
 
   // Close Task Survey modal on outside click / Escape
   useEffect(() => {
     if (!showTaskSurvey) return;
     function handleClick(e: MouseEvent) {
-      if (taskSurveyRef.current && !taskSurveyRef.current.contains(e.target as Node)) {
-        setShowTaskSurvey(false);
-      }
+      if (taskSurveyRef.current && !taskSurveyRef.current.contains(e.target as Node)) setShowTaskSurvey(false);
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
@@ -550,9 +595,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!showTaskSurvey) return;
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setShowTaskSurvey(false);
-    }
+    function handleKey(e: KeyboardEvent) { if (e.key === "Escape") setShowTaskSurvey(false); }
     document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
   }, [showTaskSurvey]);
@@ -561,9 +604,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (!showEODModal) return;
     function handleClick(e: MouseEvent) {
-      if (eodModalRef.current && !eodModalRef.current.contains(e.target as Node)) {
-        setShowEODModal(false);
-      }
+      if (eodModalRef.current && !eodModalRef.current.contains(e.target as Node)) setShowEODModal(false);
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
@@ -571,9 +612,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!showEODModal) return;
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setShowEODModal(false);
-    }
+    function handleKey(e: KeyboardEvent) { if (e.key === "Escape") setShowEODModal(false); }
     document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
   }, [showEODModal]);
@@ -582,6 +621,12 @@ export default function Dashboard() {
     e.preventDefault();
     if (!form.task_type) { setCreateErr("Please select a task type."); return; }
     if (!form.title.trim()) { setCreateErr("Task name is required."); return; }
+    if (form.task_type === "set_time" && (!form.fixed_start || !form.fixed_end)) {
+      setCreateErr("Please fill in both a start time and end time."); return;
+    }
+    if (form.recurrence === "weekly" && form.recurrence_days.length === 0) {
+      setCreateErr("Please select at least one day for weekly recurrence."); return;
+    }
     const t = sessionStorage.getItem("access_token");
     if (!t) return nav("/login", { replace: true });
     setCreating(true); setCreateErr(null);
@@ -589,10 +634,13 @@ export default function Dashboard() {
       const dates = getRecurrenceDates(form);
       const basePayload = formToPayload(form);
       for (const date of dates) {
-        const payload = { ...basePayload, deadline: (form.task_type === "due_by" || form.task_type === "set_time") ? date : null };
+        const deadline = (form.task_type === "due_by" || form.task_type === "set_time")
+          ? date
+          : (form.recurrence !== "once" ? date : null);
+        const payload = { ...basePayload, deadline };
         const res = await fetch(`${API}/tasks/`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify(payload) });
         if (res.status === 401) { sessionStorage.clear(); nav("/login", { replace: true }); return; }
-        if (!res.ok) { const msg = await res.text(); setCreateErr(msg || "Failed to create task."); return; }
+        if (!res.ok) { setCreateErr(friendlyError(await res.text(), "Failed to create task.")); return; }
       }
       setShowAddModal(false); await fetchTasks();
     } catch { setCreateErr("Failed to create task. Is the backend running?"); }
@@ -604,23 +652,23 @@ export default function Dashboard() {
     if (!editTaskId) return;
     if (!editForm.task_type) { setEditErr("Please select a task type."); return; }
     if (!editForm.title.trim()) { setEditErr("Task name is required."); return; }
+    if (editForm.task_type === "set_time" && (!editForm.fixed_start || !editForm.fixed_end)) {
+      setEditErr("Please fill in both a start time and end time."); return;
+    }
+    if (editForm.recurrence === "weekly" && editForm.recurrence_days.length === 0) {
+      setEditErr("Please select at least one day for weekly recurrence."); return;
+    }
     const t = sessionStorage.getItem("access_token");
     if (!t) return nav("/login", { replace: true });
     setEditing(true); setEditErr(null);
     try {
-      // Always update the original task
-      const res = await fetch(`${API}/tasks/${editTaskId}`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify(formToPayload(editForm)) });
+      const res = await fetch(`${API}/tasks/${editTaskId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` },
+        body: JSON.stringify(formToPayload(editForm)),
+      });
       if (res.status === 401) { sessionStorage.clear(); nav("/login", { replace: true }); return; }
-      if (!res.ok) { const msg = await res.text(); setEditErr(msg || "Failed to update task."); return; }
-      // If recurrence is set (not once), create additional copies from day 2 onward
-      if (editForm.recurrence && editForm.recurrence !== "once") {
-        const dates = getRecurrenceDates(editForm).slice(1); // skip first, already updated
-        const basePayload = formToPayload(editForm);
-        for (const date of dates) {
-          const payload = { ...basePayload, deadline: (editForm.task_type === "due_by" || editForm.task_type === "set_time") ? date : null };
-          await fetch(`${API}/tasks/`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify(payload) });
-        }
-      }
+      if (!res.ok) { setEditErr(friendlyError(await res.text(), "Failed to update task.")); return; }
       setShowEditModal(false); await fetchTasks();
     } catch { setEditErr("Failed to update task. Is the backend running?"); }
     finally { setEditing(false); }
@@ -648,7 +696,8 @@ export default function Dashboard() {
       tk.title.trim() === key &&
       tk.task_type === task.task_type &&
       tk.fixed_start === task.fixed_start &&
-      tk.recurrence === task.recurrence
+      tk.recurrence === task.recurrence &&
+      tk.duration_minutes === task.duration_minutes
     );
     setTasks(prev => prev.filter(tk => !toDelete.find(d => d.id === tk.id)));
     try {
@@ -660,7 +709,7 @@ export default function Dashboard() {
   }
 
   function handleDeleteClick(task: Task) {
-    if (task.recurrence && task.recurrence !== "once") {
+    if (task.recurrence && task.recurrence !== "none") {
       setConfirmDelete(task);
     } else {
       deleteTask(task.id);
@@ -680,26 +729,12 @@ export default function Dashboard() {
   async function completeTask(id: number, taskTitle: string) {
     const t = sessionStorage.getItem("access_token");
     if (!t) return nav("/login", { replace: true });
-
-    // Optimistically remove from active list
     setTasks((prev) => prev.filter((task) => task.id !== id));
-
     try {
-      const res = await fetch(`${API}/tasks/${id}/complete`, {
-        method: "PATCH",
-        headers: { Authorization: `Bearer ${t}` },
-      });
+      const res = await fetch(`${API}/tasks/${id}/complete`, { method: "PATCH", headers: { Authorization: `Bearer ${t}` } });
       if (res.status === 401) { sessionStorage.clear(); nav("/login", { replace: true }); return; }
-      if (!res.ok) {
-        await fetchTasks();
-        return;
-      }
-    } catch {
-      await fetchTasks();
-      return;
-    }
-
-    // Open task completion survey
+      if (!res.ok) { await fetchTasks(); return; }
+    } catch { await fetchTasks(); return; }
     setSurveyTaskId(id);
     setSurveyTaskTitle(taskTitle);
     setSurveyFeeling("");
@@ -730,23 +765,12 @@ export default function Dashboard() {
   async function openEODModal() {
     const t = sessionStorage.getItem("access_token");
     if (!t) return;
-
-    // Reset state before pre-filling
-    setEodStressMorning(0);
-    setEodStressAfternoon(0);
-    setEodStressEvening(0);
-    setEodBoredomMorning(0);
-    setEodBoredomAfternoon(0);
-    setEodBoredomEvening(0);
-    setEodOverall(0);
-    setEodNotes("");
-    setEodSuccess(false);
+    setEodStressMorning(0); setEodStressAfternoon(0); setEodStressEvening(0);
+    setEodBoredomMorning(0); setEodBoredomAfternoon(0); setEodBoredomEvening(0);
+    setEodOverall(0); setEodNotes(""); setEodSuccess(false);
     setShowEODModal(true);
-
     try {
-      const res = await fetch(`${API}/feedback/daily/${toDateStr(new Date())}`, {
-        headers: { Authorization: `Bearer ${t}` },
-      });
+      const res = await fetch(`${API}/feedback/daily/${toDateStr(new Date())}`, { headers: { Authorization: `Bearer ${t}` } });
       if (res.ok) {
         const data = await res.json();
         if (data.exists && data.data) {
@@ -785,7 +809,6 @@ export default function Dashboard() {
         }),
       });
       setEodSuccess(true);
-      // Refresh schedule — ML weights just updated, tomorrow's schedule changes
       fetchSchedule();
       setTimeout(() => setShowEODModal(false), 1400);
     } catch {}
@@ -808,13 +831,11 @@ export default function Dashboard() {
 
   const filteredTasks = priorityFilter === 0 ? tasks : tasks.filter(t => t.importance === priorityFilter);
 
-  // For the task LIST only: deduplicate recurring tasks, showing only the next upcoming instance per group
   function dedupeForList(taskList: Task[]): Task[] {
     const seen = new Map<string, Task>();
-    // Sort by deadline ascending so first encountered = soonest
     const sorted = [...taskList].sort((a, b) => (a.deadline ?? "9999").localeCompare(b.deadline ?? "9999"));
     for (const t of sorted) {
-      if (t.recurrence && t.recurrence !== "once") {
+      if (t.recurrence && t.recurrence !== "none") {
         const key = `${t.title.trim()}__${t.task_type}__${t.fixed_start ?? ""}__${t.recurrence}`;
         if (!seen.has(key)) seen.set(key, t);
       } else {
@@ -864,6 +885,14 @@ export default function Dashboard() {
   }
 
   function TaskCard({ t }: { t: Task }) {
+    const displayDuration = (() => {
+      if (t.task_type === "fixed" && t.fixed_start && t.fixed_end) {
+        const computed = calcDuration(t.fixed_start, t.fixed_end);
+        return computed ?? t.duration_minutes;
+      }
+      return t.duration_minutes;
+    })();
+
     return (
       <article className={`task ${t.completed ? "task-completed" : ""}`}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1 }}>
@@ -875,7 +904,7 @@ export default function Dashboard() {
             <div className="task-title" style={{ textDecoration: t.completed ? "line-through" : "none", opacity: t.completed ? 0.5 : 1 }}>{t.title}</div>
             <div className="task-meta">
               <PriorityBadge n={t.importance} />
-              <span>•</span><span>{formatDuration(t.duration_minutes)}</span>
+              <span>•</span><span>{formatDuration(displayDuration)}</span>
               {t.task_type === "fixed" && t.fixed_start && <><span>•</span><span style={{ color: "var(--accent2)" }}>🕐 {t.fixed_start}{t.fixed_end ? `–${t.fixed_end}` : ""}</span></>}
               {t.deadline && <><span>•</span><span className="deadline-badge">📅 {t.deadline}</span></>}
             </div>
@@ -906,21 +935,13 @@ export default function Dashboard() {
       return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
     }
 
-    // Build a lookup of task_id -> scheduled times from the ML schedule
     const scheduleMap = new Map<number, { start_time: string; end_time: string }>();
     if (dayPopupSchedule) {
       for (const item of dayPopupSchedule.scheduled) {
-        if (item.start_time && item.end_time) {
-          scheduleMap.set(item.task_id, { start_time: item.start_time, end_time: item.end_time });
-        }
+        if (item.start_time && item.end_time) scheduleMap.set(item.task_id, { start_time: item.start_time, end_time: item.end_time });
       }
     }
 
-    // Categorize tasks:
-    // - Fixed tasks with explicit start time -> timed grid (use fixed_start/fixed_end)
-    // - Semi/flexible tasks that have a ML-assigned slot -> timed grid (use schedule times)
-    // - Semi tasks with a manual fixed_end but no ML slot -> timed grid (use fixed_end)
-    // - Everything else (no time info at all) -> all-day strip
     type PositionedTask = Task & { col: number; totalCols: number; startMin: number; endMin: number; timeLabel: string };
 
     const timedTasksRaw: { task: Task; startMin: number; endMin: number; timeLabel: string }[] = [];
@@ -928,32 +949,25 @@ export default function Dashboard() {
 
     for (const t of dayTasks) {
       const scheduled = scheduleMap.get(t.id);
-
       if (t.task_type === "fixed" && t.fixed_start) {
-        // Hard-scheduled fixed task
         const startMin = timeToMinutes(t.fixed_start);
         const endMin = t.fixed_end ? timeToMinutes(t.fixed_end) : startMin + t.duration_minutes;
         timedTasksRaw.push({ task: t, startMin, endMin, timeLabel: `${to12h(t.fixed_start)}–${t.fixed_end ? to12h(t.fixed_end) : "?"}` });
       } else if (scheduled) {
-        // ML placed this task in a specific slot
         const startMin = timeToMinutes(scheduled.start_time);
         const endMin = timeToMinutes(scheduled.end_time);
         timedTasksRaw.push({ task: t, startMin, endMin, timeLabel: `${to12h(scheduled.start_time)}–${to12h(scheduled.end_time)}` });
       } else if (t.task_type === "semi" && t.fixed_end && !t.fixed_start) {
-        // Due-by task with a manual due time but no ML slot (e.g. future date)
         const endMin = timeToMinutes(t.fixed_end);
         const startMin = Math.max(endMin - t.duration_minutes, START_HOUR * 60);
         timedTasksRaw.push({ task: t, startMin, endMin, timeLabel: `due by ${to12h(t.fixed_end)}` });
       } else {
-        // No time info at all — show as all-day
         allDayTasksList.push(t);
       }
     }
 
-    // Sort timed tasks by start time
     timedTasksRaw.sort((a, b) => a.startMin - b.startMin);
 
-    // Assign overlap columns
     const positioned: PositionedTask[] = timedTasksRaw.map(({ task, startMin, endMin, timeLabel }) => ({
       ...task, startMin, endMin, timeLabel, col: 0, totalCols: 1,
     }));
@@ -961,9 +975,7 @@ export default function Dashboard() {
     positioned.forEach((task, i) => {
       const usedCols = new Set<number>();
       for (let j = 0; j < i; j++) {
-        if (positioned[j].endMin > task.startMin && positioned[j].startMin < task.endMin) {
-          usedCols.add(positioned[j].col);
-        }
+        if (positioned[j].endMin > task.startMin && positioned[j].startMin < task.endMin) usedCols.add(positioned[j].col);
       }
       let col = 0;
       while (usedCols.has(col)) col++;
@@ -973,9 +985,7 @@ export default function Dashboard() {
     positioned.forEach((task, i) => {
       let maxCol = task.col;
       positioned.forEach((other, j) => {
-        if (i !== j && other.endMin > task.startMin && other.startMin < task.endMin) {
-          maxCol = Math.max(maxCol, other.col);
-        }
+        if (i !== j && other.endMin > task.startMin && other.startMin < task.endMin) maxCol = Math.max(maxCol, other.col);
       });
       task.totalCols = maxCol + 1;
     });
@@ -1000,11 +1010,7 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* Scrollable time grid */}
-          <div style={{ flex: 1, overflowY: "auto", position: "relative" }}
-            className="day-hour-grid"
-          >
-            {/* Hour lines + labels */}
+          <div style={{ flex: 1, overflowY: "auto", position: "relative" }} className="day-hour-grid">
             <div style={{ position: "relative", height: totalHeight }}>
               {HOURS.map((hour, idx) => {
                 const hLabel = hour === 12 ? "12 PM" : hour < 12 ? `${hour} AM` : `${hour - 12} PM`;
@@ -1017,8 +1023,6 @@ export default function Dashboard() {
                   </div>
                 );
               })}
-
-              {/* Positioned task blocks */}
               {positioned.map(t => {
                 const topPx = (t.startMin - START_HOUR * 60) * PX_PER_MIN;
                 const heightPx = Math.max((t.endMin - t.startMin) * PX_PER_MIN, 24);
@@ -1027,29 +1031,11 @@ export default function Dashboard() {
                 const c = importanceColor(t.importance);
                 return (
                   <div key={t.id}
-                    style={{
-                      position: "absolute",
-                      top: topPx,
-                      left: leftOffset,
-                      width: colWidth,
-                      height: heightPx,
-                      background: c.bg,
-                      borderLeft: `3px solid ${importanceDot(t.importance)}`,
-                      borderRadius: 6,
-                      padding: "4px 8px",
-                      cursor: "pointer",
-                      overflow: "hidden",
-                      boxSizing: "border-box",
-                      zIndex: 2,
-                      border: `1px solid ${c.border}`,
-                      borderLeftWidth: 3,
-                    }}
+                    style={{ position: "absolute", top: topPx, left: leftOffset, width: colWidth, height: heightPx, background: c.bg, borderLeft: `3px solid ${importanceDot(t.importance)}`, borderRadius: 6, padding: "4px 8px", cursor: "pointer", overflow: "hidden", boxSizing: "border-box", zIndex: 2, border: `1px solid ${c.border}`, borderLeftWidth: 3 }}
                     onClick={e => { e.stopPropagation(); openEditModal(t); setDayPopup(null); }}
                   >
                     <div style={{ fontWeight: 700, fontSize: "0.8rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.title}</div>
-                    {heightPx > 30 && <div style={{ fontSize: "0.7rem", color: "var(--muted)", marginTop: 2 }}>
-                      {t.timeLabel}
-                    </div>}
+                    {heightPx > 30 && <div style={{ fontSize: "0.7rem", color: "var(--muted)", marginTop: 2 }}>{t.timeLabel}</div>}
                   </div>
                 );
               })}
@@ -1194,9 +1180,7 @@ export default function Dashboard() {
         <div className="brand">📋 PlannerHub</div>
         <div className="user-info">
           <span className="header-greeting">👋 {displayName}</span>
-          <button className="eod-btn" type="button" onClick={openEODModal}>
-            End of Day Check-In
-          </button>
+          <button className="eod-btn" type="button" onClick={openEODModal}>End of Day Check-In</button>
           <button className="ghost-btn" type="button" onClick={() => nav("/account")}>Account</button>
           <button className="signout-btn" onClick={signOut}>Sign Out</button>
         </div>
@@ -1280,7 +1264,6 @@ export default function Dashboard() {
               </div>
               <button className="ghost-btn" type="button" onClick={fetchSchedule} style={{ fontSize: "0.82rem" }}>↻ Refresh</button>
             </div>
-
             {scheduleLoading ? (
               <div className="empty" style={{ padding: "24px 0" }}>Building your schedule…</div>
             ) : !schedule ? (
@@ -1383,7 +1366,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ── Task Completion Survey Modal (#38) ──────────────────────────────────── */}
+      {/* ── Task Completion Survey Modal ─────────────────────────────────────────── */}
       {showTaskSurvey && (
         <div className="modal-overlay">
           <div className="modal survey-modal" ref={taskSurveyRef}>
@@ -1391,17 +1374,13 @@ export default function Dashboard() {
               <h2 className="modal-title">Task Complete 🎉</h2>
               <button className="modal-close" onClick={() => setShowTaskSurvey(false)}>✕</button>
             </div>
-
             <p className="survey-task-name">"{surveyTaskTitle}"</p>
             <p className="survey-subtitle">Quick check-in — how did that go?</p>
-
             <div className="survey-section">
               <div className="survey-label">How did that task feel?</div>
               <div className="feeling-pills">
                 {(["drained", "neutral", "energized"] as const).map((f) => (
-                  <button
-                    key={f}
-                    type="button"
+                  <button key={f} type="button"
                     className={`feeling-pill feeling-pill-${f} ${surveyFeeling === f ? "feeling-pill-active" : ""}`}
                     onClick={() => setSurveyFeeling(surveyFeeling === f ? "" : f)}
                   >
@@ -1411,7 +1390,6 @@ export default function Dashboard() {
                 ))}
               </div>
             </div>
-
             <div className="survey-section">
               <div className="survey-label">Satisfaction</div>
               <StarRating value={surveySatisfaction} onChange={setSurveySatisfaction} />
@@ -1423,17 +1401,9 @@ export default function Dashboard() {
                  surveySatisfaction === 4 ? "Very satisfied" : "Extremely satisfied"}
               </div>
             </div>
-
             <div className="modal-actions" style={{ marginTop: 8 }}>
-              <button type="button" className="ghost-btn" onClick={() => setShowTaskSurvey(false)}>
-                Skip
-              </button>
-              <button
-                type="button"
-                className="primary-btn"
-                onClick={submitTaskSurvey}
-                disabled={submittingTaskSurvey}
-              >
+              <button type="button" className="ghost-btn" onClick={() => setShowTaskSurvey(false)}>Skip</button>
+              <button type="button" className="primary-btn" onClick={submitTaskSurvey} disabled={submittingTaskSurvey}>
                 {submittingTaskSurvey ? "Saving…" : "Submit"}
               </button>
             </div>
@@ -1442,6 +1412,7 @@ export default function Dashboard() {
       )}
 
       <DayPopup />
+
       {/* Confirm delete recurring modal */}
       {confirmDelete && (
         <div className="modal-overlay">
@@ -1466,7 +1437,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ── End of Day Survey Modal (#40) ───────────────────────────────────────── */}
+      {/* ── End of Day Survey Modal ──────────────────────────────────────────────── */}
       {showEODModal && (
         <div className="modal-overlay">
           <div className="modal survey-modal eod-modal" ref={eodModalRef}>
@@ -1474,7 +1445,6 @@ export default function Dashboard() {
               <h2 className="modal-title">End of Day Check-In</h2>
               <button className="modal-close" onClick={() => setShowEODModal(false)}>✕</button>
             </div>
-
             {eodSuccess ? (
               <div className="eod-success">
                 <div className="eod-success-icon">✓</div>
@@ -1485,14 +1455,12 @@ export default function Dashboard() {
                 <p className="survey-subtitle" style={{ marginBottom: 20 }}>
                   Rate your stress levels throughout the day to help adapt your schedule.
                 </p>
-
                 <div className="survey-section">
                   <div className="survey-label">Stress levels by time of day</div>
                   <div className="stress-hint-row">
                     <span className="stress-hint">1 = Very relaxed</span>
                     <span className="stress-hint">5 = Very stressed</span>
                   </div>
-
                   <div className="stress-period-row">
                     <span className="stress-period-label">🌅 Morning</span>
                     <StressScale value={eodStressMorning} onChange={setEodStressMorning} />
@@ -1506,14 +1474,12 @@ export default function Dashboard() {
                     <StressScale value={eodStressEvening} onChange={setEodStressEvening} />
                   </div>
                 </div>
-
                 <div className="survey-section">
                   <div className="survey-label">Boredom / engagement by time of day</div>
                   <div className="stress-hint-row">
                     <span className="stress-hint">1 = Very engaged</span>
                     <span className="stress-hint">5 = Very bored</span>
                   </div>
-
                   <div className="stress-period-row">
                     <span className="stress-period-label">🌅 Morning</span>
                     <StressScale value={eodBoredomMorning} onChange={setEodBoredomMorning} />
@@ -1527,7 +1493,6 @@ export default function Dashboard() {
                     <StressScale value={eodBoredomEvening} onChange={setEodBoredomEvening} />
                   </div>
                 </div>
-
                 <div className="survey-section">
                   <div className="survey-label">Overall day rating</div>
                   <StarRating value={eodOverall} onChange={setEodOverall} />
@@ -1539,7 +1504,6 @@ export default function Dashboard() {
                      eodOverall === 4 ? "Good day" : "Great day!"}
                   </div>
                 </div>
-
                 <div className="survey-section">
                   <div className="survey-label">Notes <span className="survey-label-optional">(optional)</span></div>
                   <textarea
@@ -1551,16 +1515,9 @@ export default function Dashboard() {
                     maxLength={500}
                   />
                 </div>
-
                 <div className="modal-actions" style={{ marginTop: 4 }}>
-                  <button type="button" className="ghost-btn" onClick={() => setShowEODModal(false)}>
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="primary-btn"
-                    disabled={submittingEOD}
-                  >
+                  <button type="button" className="ghost-btn" onClick={() => setShowEODModal(false)}>Cancel</button>
+                  <button type="submit" className="primary-btn" disabled={submittingEOD}>
                     {submittingEOD ? "Saving…" : "Save Check-In"}
                   </button>
                 </div>
