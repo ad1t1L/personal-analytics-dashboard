@@ -275,13 +275,14 @@ export default function DashboardView({ onSignOut }: Props) {
         <div className="user-info">
           <span className="header-greeting">{displayName}</span>
           <button
-            className="ghost-btn"
+            className="widget-launch-btn widget-launch-btn--compact"
             type="button"
             onClick={() => {
               showWidgetRobust().catch(() => {});
             }}
+            title="Open the floating task widget (also in sidebar & tray)"
           >
-            Show widget
+            📌 Task widget
           </button>
           <button
             className="ghost-btn"
@@ -326,6 +327,16 @@ export default function DashboardView({ onSignOut }: Props) {
           <button className="side-pill" type="button">
             Taskboard
           </button>
+          <button
+            className="widget-launch-btn widget-launch-btn--sidebar"
+            type="button"
+            onClick={() => {
+              showWidgetRobust().catch(() => {});
+            }}
+            title="Opens the small floating window with today’s tasks"
+          >
+            📌 Open task widget
+          </button>
           <button className="side-link side-link-danger" type="button" onClick={signOut}>
             Sign out
           </button>
@@ -340,7 +351,17 @@ export default function DashboardView({ onSignOut }: Props) {
                   {tasks.length} task{tasks.length !== 1 ? "s" : ""} total
                 </p>
               </div>
-              <div style={{ display: "flex", gap: 8 }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <button
+                  className="widget-launch-btn widget-launch-btn--inline"
+                  type="button"
+                  onClick={() => {
+                    showWidgetRobust().catch(() => {});
+                  }}
+                  title="Floating task list (stays on top)"
+                >
+                  📌 Widget
+                </button>
                 <button className="ghost-btn" type="button" onClick={fetchTasks}>
                   ↻ Refresh
                 </button>

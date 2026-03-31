@@ -13,64 +13,90 @@ impl WidgetCreationLock {
     }
 }
 
+/// Build system tray after menus exist. On Linux, calling this synchronously inside `setup`
+/// races GTK initialization and can trigger `gtk_widget_get_scale_factor` / GTK_IS_WIDGET
+/// assertions — defer with `defer_tray_on_linux`.
+fn install_tray(app: &tauri::AppHandle) -> Result<(), String> {
+    let show_widget_item = tauri::menu::MenuItemBuilder::new("Show Widget")
+        .id("show_widget")
+        .build(app)
+        .map_err(|e| e.to_string())?;
+    let hide_widget_item = tauri::menu::MenuItemBuilder::new("Hide Widget")
+        .id("hide_widget")
+        .build(app)
+        .map_err(|e| e.to_string())?;
+    let open_app = tauri::menu::MenuItemBuilder::new("Open App")
+        .id("open_app")
+        .build(app)
+        .map_err(|e| e.to_string())?;
+    let quit = tauri::menu::MenuItemBuilder::new("Quit")
+        .id("quit")
+        .build(app)
+        .map_err(|e| e.to_string())?;
+
+    let menu = tauri::menu::MenuBuilder::new(app)
+        .items(&[&show_widget_item, &hide_widget_item, &open_app, &quit])
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let tray_icon = tauri::include_image!("icons/32x32.png");
+    let tray = tauri::tray::TrayIconBuilder::new()
+        .icon(tray_icon)
+        .tooltip("Personal Analytics Dashboard")
+        .menu(&menu)
+        .show_menu_on_left_click(true)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "show_widget" => {
+                let _ = show_widget(app);
+            }
+            "hide_widget" => {
+                let _ = hide_widget(app);
+            }
+            "open_app" => {
+                open_main_window(app);
+            }
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .build(app)
+        .map_err(|e| e.to_string())?;
+
+    app.manage(TrayState(tray));
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn defer_tray_on_linux(handle: tauri::AppHandle) {
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(600));
+        let app_for_tray = handle.clone();
+        if let Err(e) = handle.run_on_main_thread(move || {
+            if let Err(err) = install_tray(&app_for_tray) {
+                eprintln!("[tauri-widget] System tray unavailable: {}", err);
+            }
+        }) {
+            eprintln!("[tauri-widget] Could not schedule tray on main thread: {}", e);
+        }
+    });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            // Do not create the widget webview during setup. On Linux (GTK/WebKit2GTK),
-            // creating a second webview synchronously during setup races the main window and
-            // can trigger gtk_widget_get_scale_factor failures. The widget is created lazily.
+            // Do not create the widget webview during setup (see try_build_widget_window).
             app.manage(WidgetCreationLock(Mutex::new(())));
             app.manage(WidgetToken(std::sync::Mutex::new(None)));
 
-            let show_widget_item = tauri::menu::MenuItemBuilder::new("Show Widget")
-                .id("show_widget")
-                .build(app)?;
-            let hide_widget_item = tauri::menu::MenuItemBuilder::new("Hide Widget")
-                .id("hide_widget")
-                .build(app)?;
-            let open_app = tauri::menu::MenuItemBuilder::new("Open App")
-                .id("open_app")
-                .build(app)?;
-            let quit = tauri::menu::MenuItemBuilder::new("Quit")
-                .id("quit")
-                .build(app)?;
-
-            let menu = tauri::menu::MenuBuilder::new(app)
-                .items(&[&show_widget_item, &hide_widget_item, &open_app, &quit])
-                .build()?;
-
-            let tray_icon = tauri::include_image!("icons/32x32.png");
-            let tray_result = tauri::tray::TrayIconBuilder::new()
-                .icon(tray_icon)
-                .tooltip("Personal Analytics Dashboard")
-                .menu(&menu)
-                .show_menu_on_left_click(true)
-                .on_menu_event(|app, event| match event.id().as_ref() {
-                    "show_widget" => {
-                        let _ = show_widget(app);
-                    }
-                    "hide_widget" => {
-                        let _ = hide_widget(app);
-                    }
-                    "open_app" => {
-                        open_main_window(app);
-                    }
-                    "quit" => app.exit(0),
-                    _ => {}
-                })
-                .build(app);
-
-            match tray_result {
-                Ok(tray) => {
-                    app.manage(TrayState(tray));
-                }
-                Err(e) => {
-                    eprintln!(
-                        "[tauri-widget] System tray unavailable (app still runs): {}",
-                        e
-                    );
+            #[cfg(target_os = "linux")]
+            {
+                defer_tray_on_linux(app.handle().clone());
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                if let Err(e) = install_tray(app.handle()) {
+                    eprintln!("[tauri-widget] System tray unavailable: {}", e);
                 }
             }
 
@@ -148,8 +174,7 @@ fn try_build_widget_window(app: &tauri::AppHandle) -> Result<(), String> {
 
     #[cfg(target_os = "linux")]
     {
-        // Brief beat so GTK can realize the widget before we hide/show.
-        std::thread::sleep(Duration::from_millis(32));
+        std::thread::sleep(Duration::from_millis(48));
     }
 
     let _ = window.hide();
@@ -198,7 +223,6 @@ fn show_widget(app: &tauri::AppHandle) -> Result<(), String> {
         return Err("Widget window missing after ensure".to_string());
     };
 
-    // Redundant visibility steps — different platforms honor different calls.
     let _ = w.unminimize();
     let _ = w.show();
     let _ = w.set_always_on_top(true);
