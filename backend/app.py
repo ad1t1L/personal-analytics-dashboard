@@ -8,8 +8,10 @@ from fastapi.responses import FileResponse
 
 from backend.database import engine
 from backend.models import Base
+from backend.sqlite_migrations import apply_sqlite_migrations
 
 Base.metadata.create_all(bind=engine)
+apply_sqlite_migrations(engine)
 
 from backend.routes.tasks import router as tasks_router
 from backend.routes.schedules import router as schedules_router
