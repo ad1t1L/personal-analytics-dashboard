@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import TasksAtAGlanceWidget from "../components/TasksAtAGlanceWidget.tsx";
 
 const API = "http://localhost:8000";
 
@@ -312,6 +313,7 @@ export default function Dashboard() {
   const [totpEnabled, setTotpEnabled] = useState<boolean | null>(null);
   const [email2FAEnabled, setEmail2FAEnabled] = useState<boolean | null>(null);
   const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [showTaskGlance, setShowTaskGlance] = useState(false);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [form, setForm] = useState<TaskForm>(blankForm());
@@ -1194,6 +1196,14 @@ export default function Dashboard() {
         <div className="brand">📋 PlannerHub</div>
         <div className="user-info">
           <span className="header-greeting">👋 {displayName}</span>
+          <button
+            type="button"
+            className="glance-btn"
+            onClick={() => setShowTaskGlance(true)}
+            title="Quick summary of open tasks by urgency"
+          >
+            ✨ At a glance
+          </button>
           <button className="eod-btn" type="button" onClick={openEODModal}>
             End of Day Check-In
           </button>
@@ -1569,6 +1579,13 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      <TasksAtAGlanceWidget
+        open={showTaskGlance}
+        onClose={() => setShowTaskGlance(false)}
+        tasks={tasks}
+        loading={loading}
+      />
     </>
   );
 }
