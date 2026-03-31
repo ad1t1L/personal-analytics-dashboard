@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { syncTauriWidgetToken } from "../tauriWidgetBridge.ts";
 
 type Tab = "login" | "signup";
 
@@ -286,6 +287,8 @@ export default function Login() {
         localStorage.removeItem("planner_session");
       }
 
+      void syncTauriWidgetToken(data.access_token);
+
       setLoginSuccess(true);
       setTimeout(() => nav("/dashboard", { replace: true }), 1800);
 
@@ -353,6 +356,7 @@ export default function Login() {
         localStorage.removeItem("refresh_token");
         localStorage.removeItem("planner_session");
       }
+      void syncTauriWidgetToken(data.access_token);
       setLoginSuccess(true);
       setTimeout(() => nav("/dashboard", { replace: true }), 1800);
     } catch {

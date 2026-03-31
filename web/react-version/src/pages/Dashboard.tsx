@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import TasksAtAGlanceWidget from "../components/TasksAtAGlanceWidget.tsx";
+import { emitTasksUpdatedIfTauri, isTauriRuntime, syncTauriWidgetToken } from "../tauriWidgetBridge.ts";
+import { showWidgetRobust } from "../widgetInvoke.ts";
 
 const API = "http://localhost:8000";
 
@@ -398,6 +400,7 @@ export default function Dashboard() {
       if (res.status === 401) { sessionStorage.clear(); nav("/login", { replace: true }); return; }
       const data = await res.json();
       setTasks(Array.isArray(data.tasks) ? data.tasks : []);
+      void emitTasksUpdatedIfTauri();
     } catch { setErr("Could not load tasks. Is the backend running on :8000?"); }
     finally { setLoading(false); }
   }
@@ -414,6 +417,12 @@ export default function Dashboard() {
   }
 
   useEffect(() => { if (session) { fetchTasks(); fetchSchedule(); } }, [session]);
+
+  useEffect(() => {
+    if (!session) return;
+    const t = sessionStorage.getItem("access_token");
+    if (t) void syncTauriWidgetToken(t);
+  }, [session]);
 
   const fetch2FAStatus = useCallback(async () => {
     const token = sessionStorage.getItem("access_token");
@@ -797,6 +806,7 @@ export default function Dashboard() {
   async function signOut() {
     const rt = sessionStorage.getItem("refresh_token");
     if (rt) { try { await fetch(`${API}/auth/logout`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refresh_token: rt }) }); } catch {} }
+    void syncTauriWidgetToken(null);
     sessionStorage.clear(); localStorage.clear(); nav("/login", { replace: true });
   }
 
@@ -1196,6 +1206,18 @@ export default function Dashboard() {
         <div className="brand">📋 PlannerHub</div>
         <div className="user-info">
           <span className="header-greeting">👋 {displayName}</span>
+          {isTauriRuntime() && (
+            <button
+              type="button"
+              className="glance-btn"
+              onClick={() => {
+                showWidgetRobust().catch(() => {});
+              }}
+              title="Open the small floating task window (tray: Show Widget)"
+            >
+              📌 Float widget
+            </button>
+          )}
           <button
             type="button"
             className="glance-btn"

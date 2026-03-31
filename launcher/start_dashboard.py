@@ -27,7 +27,7 @@ PORT = int(os.environ.get("PAD_PORT", "8000"))
 PORT_TRIES = int(os.environ.get("PAD_PORT_TRIES", "10"))
 LOGIN = "/login"
 
-# Cargo package name in web/react-version/src-tauri/Cargo.toml
+# Binary name from web/react-version/src-tauri/Cargo.toml [[bin]] / package name.
 _TAURI_CRATE_BIN = "desktoptauri-widget"
 
 

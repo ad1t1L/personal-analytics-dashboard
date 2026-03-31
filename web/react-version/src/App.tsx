@@ -4,6 +4,12 @@ import Dashboard from "./pages/Dashboard.tsx";
 import ForgotPassword from "./pages/ForgotPassword.tsx";
 import ResetPassword from "./pages/ResetPassword.tsx";
 import Account from "./pages/Account.tsx";
+import TauriFloatingWidget from "./pages/TauriFloatingWidget.tsx";
+
+function isTauriWidgetUrl() {
+  if (typeof window === "undefined") return false;
+  return new URLSearchParams(window.location.search).get("widget") === "1";
+}
 
 function hasSession() {
   // Check for real JWT token instead of fake session object
@@ -15,6 +21,10 @@ function Protected({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  if (isTauriWidgetUrl()) {
+    return <TauriFloatingWidget />;
+  }
+
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
