@@ -619,8 +619,11 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
-  height: 56px;
   min-height: 56px;
+  flex-wrap: wrap;
+  row-gap: 10px;
+  padding-top: 10px;
+  padding-bottom: 10px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   gap: 16px;
@@ -638,8 +641,59 @@ body {
 .dashboard-wrap .user-info {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: min(100%, 720px);
+}
+
+/* High-visibility launcher for the floating Tauri widget */
+.widget-launch-btn {
+  border: 1px solid rgba(108, 99, 255, 0.55);
+  background: linear-gradient(135deg, rgba(108, 99, 255, 0.35), rgba(56, 217, 169, 0.12));
+  color: #e8eaf0;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 0.88rem;
+  cursor: pointer;
+  border-radius: 10px;
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+  box-shadow: 0 0 0 1px rgba(108, 99, 255, 0.15) inset;
+}
+.widget-launch-btn:hover {
+  box-shadow: 0 4px 20px rgba(108, 99, 255, 0.35);
+  transform: translateY(-1px);
+}
+.widget-launch-btn--compact {
+  padding: 8px 14px;
+  white-space: nowrap;
+}
+.widget-launch-btn--sidebar {
+  width: 100%;
+  margin-top: 8px;
+  padding: 11px 12px;
+  text-align: left;
+  font-size: 0.85rem;
+}
+.widget-launch-btn--inline {
+  padding: 8px 14px;
+  font-size: 0.84rem;
+  white-space: nowrap;
+}
+
+.loginWidgetHint {
+  margin-top: 18px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(108, 99, 255, 0.25);
+  background: rgba(108, 99, 255, 0.08);
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: rgba(232, 238, 252, 0.92);
+}
+.loginWidgetHint strong {
+  color: #c4bfff;
 }
 
 .dashboard-wrap .header-greeting {

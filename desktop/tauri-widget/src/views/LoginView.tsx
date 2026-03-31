@@ -320,6 +320,12 @@ export default function LoginView({ onAuthed }: Props) {
             </form>
           )}
 
+          <div className="loginWidgetHint">
+            <strong>Task widget:</strong> After you sign in, look for{" "}
+            <strong>📌 Task widget</strong> in the top bar, sidebar, or task panel — or use the{" "}
+            <strong>system tray</strong> menu (Show Widget).
+          </div>
+
           <div className="loginFooter">
             Backend URL: <code>{API_BASE}</code>
           </div>
