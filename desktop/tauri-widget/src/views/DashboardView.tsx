@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { hideWidgetRobust, showWidgetRobust } from "../widgetInvoke";
 import { emit } from "@tauri-apps/api/event";
 
 const API_BASE = (import.meta as any).env?.VITE_API_BASE || "http://localhost:8000";
@@ -277,14 +277,18 @@ export default function DashboardView({ onSignOut }: Props) {
           <button
             className="ghost-btn"
             type="button"
-            onClick={() => invoke("show_widget_window")}
+            onClick={() => {
+              showWidgetRobust().catch(() => {});
+            }}
           >
             Show widget
           </button>
           <button
             className="ghost-btn"
             type="button"
-            onClick={() => invoke("hide_widget_window")}
+            onClick={() => {
+              hideWidgetRobust().catch(() => {});
+            }}
           >
             Hide widget
           </button>

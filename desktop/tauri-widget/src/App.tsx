@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { hideWidgetRobust } from "./widgetInvoke";
 import { listen } from "@tauri-apps/api/event";
 import "./App.css";
 import LoginView from "./views/LoginView";
@@ -115,7 +116,9 @@ function WidgetContent() {
           <button
             type="button"
             className="widgetHideBtn"
-            onClick={() => invoke("hide_widget_window")}
+            onClick={() => {
+              hideWidgetRobust().catch(() => {});
+            }}
             aria-label="Hide widget"
             title="Hide widget"
           >
