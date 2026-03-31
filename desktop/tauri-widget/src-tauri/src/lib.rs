@@ -1,12 +1,27 @@
-use tauri::Manager;
+use std::sync::Mutex;
+use std::time::Duration;
+
 use tauri::Emitter;
+use tauri::Manager;
+
+/// Serialize widget window creation so one platform race never creates two `widget` labels.
+struct WidgetCreationLock(Mutex<()>);
+
+impl WidgetCreationLock {
+    fn lock_guard(&self) -> std::sync::MutexGuard<'_, ()> {
+        self.0.lock().unwrap_or_else(|e| e.into_inner())
+    }
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            ensure_widget_window(app.handle())?;
+            // Do not create the widget webview during setup. On Linux (GTK/WebKit2GTK),
+            // creating a second webview synchronously during setup races the main window and
+            // can trigger gtk_widget_get_scale_factor failures. The widget is created lazily.
+            app.manage(WidgetCreationLock(Mutex::new(())));
             app.manage(WidgetToken(std::sync::Mutex::new(None)));
 
             let show_widget_item = tauri::menu::MenuItemBuilder::new("Show Widget")
@@ -27,7 +42,7 @@ pub fn run() {
                 .build()?;
 
             let tray_icon = tauri::include_image!("icons/32x32.png");
-            let tray = tauri::tray::TrayIconBuilder::new()
+            let tray_result = tauri::tray::TrayIconBuilder::new()
                 .icon(tray_icon)
                 .tooltip("Personal Analytics Dashboard")
                 .menu(&menu)
@@ -40,19 +55,24 @@ pub fn run() {
                         let _ = hide_widget(app);
                     }
                     "open_app" => {
-                        if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.show();
-                            let _ = w.set_focus();
-                        }
+                        open_main_window(app);
                     }
                     "quit" => app.exit(0),
                     _ => {}
                 })
-                .build(app)?;
+                .build(app);
 
-            // Keep the tray icon alive for the app lifetime.
-            // (Dropping it can remove it on some platforms.)
-            app.manage(TrayState(tray));
+            match tray_result {
+                Ok(tray) => {
+                    app.manage(TrayState(tray));
+                }
+                Err(e) => {
+                    eprintln!(
+                        "[tauri-widget] System tray unavailable (app still runs): {}",
+                        e
+                    );
+                }
+            }
 
             Ok(())
         })
@@ -66,6 +86,7 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
+#[allow(dead_code)]
 struct TrayState(tauri::tray::TrayIcon<tauri::Wry>);
 
 struct WidgetToken(std::sync::Mutex<Option<String>>);
@@ -89,55 +110,119 @@ fn get_widget_token(app: tauri::AppHandle) -> Result<Option<String>, String> {
     Ok(g.clone())
 }
 
-fn ensure_widget_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
-    if app.get_webview_window("widget").is_some() {
-        return Ok(());
+fn open_main_window(app: &tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.unminimize();
+        let _ = w.show();
+        let _ = w.set_focus();
     }
+}
 
-    let window = tauri::WebviewWindowBuilder::new(
+const WIDGET_CREATE_ATTEMPTS: usize = 4;
+
+fn try_build_widget_window(app: &tauri::AppHandle) -> Result<(), String> {
+    let mut builder = tauri::WebviewWindowBuilder::new(
         app,
         "widget",
         tauri::WebviewUrl::App("index.html?widget=1".into()),
     )
-    .title("Widget")
+    .title("Today's plan")
     .inner_size(380.0, 320.0)
+    .min_inner_size(300.0, 220.0)
     .resizable(false)
+    .maximizable(false)
     .decorations(false)
     .always_on_top(true)
-    .visible(false)
-    .build()?;
+    .visible(false);
 
-    // If a platform ignores `visible(false)` at creation time,
-    // hide it immediately after building.
+    #[cfg(target_os = "windows")]
+    {
+        builder = builder.skip_taskbar(true);
+    }
+    #[cfg(target_os = "linux")]
+    {
+        builder = builder.skip_taskbar(true);
+    }
+
+    let window = builder.build().map_err(|e| e.to_string())?;
+
+    #[cfg(target_os = "linux")]
+    {
+        // Brief beat so GTK can realize the widget before we hide/show.
+        std::thread::sleep(Duration::from_millis(32));
+    }
+
     let _ = window.hide();
-
     Ok(())
 }
 
-fn show_widget<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
+fn ensure_widget_window(app: &tauri::AppHandle) -> Result<(), String> {
+    if app.get_webview_window("widget").is_some() {
+        return Ok(());
+    }
+
+    let lock = app.state::<WidgetCreationLock>();
+    let _guard = lock.lock_guard();
+
+    if app.get_webview_window("widget").is_some() {
+        return Ok(());
+    }
+
+    let mut last_err: Option<String> = None;
+
+    for attempt in 0..WIDGET_CREATE_ATTEMPTS {
+        if attempt > 0 {
+            let ms = 50u64 * (1u64 << attempt);
+            std::thread::sleep(Duration::from_millis(ms.min(600)));
+        }
+
+        match try_build_widget_window(app) {
+            Ok(()) => return Ok(()),
+            Err(e) => {
+                last_err = Some(e);
+            }
+        }
+
+        if app.get_webview_window("widget").is_some() {
+            return Ok(());
+        }
+    }
+
+    Err(last_err.unwrap_or_else(|| "Widget window failed to create".to_string()))
+}
+
+fn show_widget(app: &tauri::AppHandle) -> Result<(), String> {
     ensure_widget_window(app)?;
-    if let Some(w) = app.get_webview_window("widget") {
-        w.show()?;
-        w.set_focus()?;
-    }
+
+    let Some(w) = app.get_webview_window("widget") else {
+        return Err("Widget window missing after ensure".to_string());
+    };
+
+    // Redundant visibility steps — different platforms honor different calls.
+    let _ = w.unminimize();
+    let _ = w.show();
+    let _ = w.set_always_on_top(true);
+    let _ = w.set_focus();
+
     Ok(())
 }
 
-fn hide_widget<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
-    if let Some(w) = app.get_webview_window("widget") {
-        w.hide()?;
+fn hide_widget(app: &tauri::AppHandle) -> Result<(), String> {
+    match app.get_webview_window("widget") {
+        Some(w) => {
+            let _ = w.hide();
+            Ok(())
+        }
+        None => Ok(()),
     }
-    Ok(())
 }
 
 #[tauri::command]
 fn show_widget_window(app: tauri::AppHandle) -> Result<(), String> {
-    show_widget(&app).map_err(|e| e.to_string())?;
-    Ok(())
+    show_widget(&app)
 }
 
 #[tauri::command]
 fn hide_widget_window(app: tauri::AppHandle) -> Result<(), String> {
-    hide_widget(&app).map_err(|e| e.to_string())?;
-    Ok(())
+    hide_widget(&app)
 }
