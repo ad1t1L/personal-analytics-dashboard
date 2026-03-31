@@ -24,6 +24,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
+        "http://127.0.0.1:5173",
         "http://localhost:3000",
         "http://localhost:1420",
         "http://127.0.0.1:1420",
@@ -60,9 +61,11 @@ if _FRONTEND_DIST.is_dir():
     index_html = _FRONTEND_DIST / "index.html"
     vite_svg = _FRONTEND_DIST / "vite.svg"
 
+    _no_cache = {"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"}
+
     @app.get("/")
     def spa_index():
-        return FileResponse(str(index_html))
+        return FileResponse(str(index_html), headers=_no_cache)
 
     @app.get("/vite.svg")
     def spa_vite_svg():
@@ -86,7 +89,7 @@ if _FRONTEND_DIST.is_dir():
         if "." in path:
             raise HTTPException(status_code=404)
 
-        return FileResponse(str(index_html))
+        return FileResponse(str(index_html), headers=_no_cache)
 else:
     logging.getLogger(__name__).warning(
         "web/react-version/dist missing — run `npm run build` in web/react-version to serve the UI on :8000"

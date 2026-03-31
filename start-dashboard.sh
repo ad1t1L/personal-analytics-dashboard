@@ -118,7 +118,9 @@ echo "Installing Python dependencies..." >&2
 "$PY" -m pip install --upgrade pip
 retry_cmd 3 3 -- "$PY" -m pip install -r requirements.txt
 
-# Build the React frontend if dist/ is missing.
+# Build the React frontend if dist/ is missing (needed for the API to serve the SPA in a browser).
+# Tauri dev uses Vite (:5173) and does not require dist/. To force a fresh dist/ anyway, use:
+#   PAD_BUILD_FRONTEND=1 ./start-dashboard.sh
 DIST_INDEX="$ROOT_DIR/web/react-version/dist/index.html"
 if [[ ! -f "$DIST_INDEX" ]]; then
   echo "Building React frontend (npm run build)..." >&2

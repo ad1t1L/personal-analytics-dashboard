@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-
-const API = "http://localhost:8000";
+import { API_BASE } from "../apiBase.ts";
 
 type Task = {
   id: number;
@@ -43,7 +42,7 @@ export default function TauriFloatingWidget() {
     }
     setLoading(true);
     setError(null);
-    fetch(`${API}/tasks/`, { headers: { Authorization: `Bearer ${token}` } })
+    fetch(`${API_BASE}/tasks/`, { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Failed"))))
       .then((data) => {
         setTasks(Array.isArray(data.tasks) ? data.tasks : []);

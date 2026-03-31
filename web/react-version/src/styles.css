@@ -85,6 +85,17 @@ header .user-info--compact {
   border-top: 1px solid var(--border);
   background: rgba(0, 0, 0, 0.18);
 }
+.header-dev-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent2);
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(56, 217, 169, 0.35);
+  background: rgba(56, 217, 169, 0.1);
+}
 .widget-show-btn--hero {
   font-size: 0.95rem;
   padding: 10px 18px;

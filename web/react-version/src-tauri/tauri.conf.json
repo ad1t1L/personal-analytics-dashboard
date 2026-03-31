@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "identifier": "com.personal.analytics.dashboard",
   "build": {
-    "devUrl": "http://localhost:8000",
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:5173",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },

@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom";
 import TasksAtAGlanceWidget from "../components/TasksAtAGlanceWidget.tsx";
 import { emitTasksUpdatedIfTauri, syncTauriWidgetToken } from "../tauriWidgetBridge.ts";
 import { showWidgetRobust } from "../widgetInvoke.ts";
+import { API_BASE } from "../apiBase.ts";
 
-const API = "http://localhost:8000";
 
 type Session = { email?: string; loginTime?: string; name?: string };
 
@@ -396,12 +396,12 @@ export default function Dashboard() {
     if (!t) { nav("/login", { replace: true }); return; }
     setLoading(true); setErr(null);
     try {
-      const res = await fetch(`${API}/tasks/`, { headers: { Authorization: `Bearer ${t}` } });
+      const res = await fetch(`${API_BASE}/tasks/`, { headers: { Authorization: `Bearer ${t}` } });
       if (res.status === 401) { sessionStorage.clear(); nav("/login", { replace: true }); return; }
       const data = await res.json();
       setTasks(Array.isArray(data.tasks) ? data.tasks : []);
       void emitTasksUpdatedIfTauri();
-    } catch { setErr("Could not load tasks. Is the backend running on :8000?"); }
+    } catch { setErr("Could not load tasks. Start the API on port 8000 (e.g. python launcher/start_dashboard.py from repo root)."); }
     finally { setLoading(false); }
   }
 
@@ -410,7 +410,7 @@ export default function Dashboard() {
     if (!t) return;
     setScheduleLoading(true);
     try {
-      const res = await fetch(`${API}/schedules/today`, { headers: { Authorization: `Bearer ${t}` } });
+      const res = await fetch(`${API_BASE}/schedules/today`, { headers: { Authorization: `Bearer ${t}` } });
       if (res.ok) setSchedule(await res.json());
     } catch {}
     finally { setScheduleLoading(false); }
@@ -428,7 +428,7 @@ export default function Dashboard() {
     const token = sessionStorage.getItem("access_token");
     if (!token) return;
     try {
-      const res = await fetch(`${API}/auth/2fa/status`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`${API_BASE}/auth/2fa/status`, { headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) { const data = await res.json(); setTotpEnabled(!!data.totp_enabled); setEmail2FAEnabled(!!data.email_2fa_enabled); }
     } catch { setTotpEnabled(false); setEmail2FAEnabled(false); }
   }, []);
@@ -453,7 +453,7 @@ export default function Dashboard() {
     if (!dayPopup) { setDayPopupSchedule(null); return; }
     const t = sessionStorage.getItem("access_token");
     if (!t) return;
-    fetch(`${API}/schedules/date/${dayPopup}`, { headers: { Authorization: `Bearer ${t}` } })
+    fetch(`${API_BASE}/schedules/date/${dayPopup}`, { headers: { Authorization: `Bearer ${t}` } })
       .then(r => r.ok ? r.json() : null)
       .then(data => setDayPopupSchedule(data ?? null))
       .catch(() => setDayPopupSchedule(null));
@@ -601,7 +601,7 @@ export default function Dashboard() {
       const basePayload = formToPayload(form);
       for (const date of dates) {
         const payload = { ...basePayload, deadline: (form.task_type === "due_by" || form.task_type === "set_time") ? date : null };
-        const res = await fetch(`${API}/tasks/`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify(payload) });
+        const res = await fetch(`${API_BASE}/tasks/`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify(payload) });
         if (res.status === 401) { sessionStorage.clear(); nav("/login", { replace: true }); return; }
         if (!res.ok) { const msg = await res.text(); setCreateErr(msg || "Failed to create task."); return; }
       }
@@ -620,7 +620,7 @@ export default function Dashboard() {
     setEditing(true); setEditErr(null);
     try {
       // Always update the original task
-      const res = await fetch(`${API}/tasks/${editTaskId}`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify(formToPayload(editForm)) });
+      const res = await fetch(`${API_BASE}/tasks/${editTaskId}`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify(formToPayload(editForm)) });
       if (res.status === 401) { sessionStorage.clear(); nav("/login", { replace: true }); return; }
       if (!res.ok) { const msg = await res.text(); setEditErr(msg || "Failed to update task."); return; }
       // If recurrence is set (not once), create additional copies from day 2 onward
@@ -629,7 +629,7 @@ export default function Dashboard() {
         const basePayload = formToPayload(editForm);
         for (const date of dates) {
           const payload = { ...basePayload, deadline: (editForm.task_type === "due_by" || editForm.task_type === "set_time") ? date : null };
-          await fetch(`${API}/tasks/`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify(payload) });
+          await fetch(`${API_BASE}/tasks/`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify(payload) });
         }
       }
       setShowEditModal(false); await fetchTasks();
@@ -645,7 +645,7 @@ export default function Dashboard() {
     const prev = tasks;
     setTasks(x => x.filter(task => task.id !== id));
     try {
-      const res = await fetch(`${API}/tasks/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${t}` } });
+      const res = await fetch(`${API_BASE}/tasks/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${t}` } });
       if (res.status === 401) { sessionStorage.clear(); nav("/login", { replace: true }); return; }
       if (!res.ok) { setTasks(prev); setErr("Could not delete task."); }
     } catch { setTasks(prev); setErr("Could not delete task."); }
@@ -664,7 +664,7 @@ export default function Dashboard() {
     setTasks(prev => prev.filter(tk => !toDelete.find(d => d.id === tk.id)));
     try {
       await Promise.all(toDelete.map(tk =>
-        fetch(`${API}/tasks/${tk.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${t}` } })
+        fetch(`${API_BASE}/tasks/${tk.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${t}` } })
       ));
       await fetchTasks();
     } catch { setErr("Could not delete all recurring tasks."); await fetchTasks(); }
@@ -683,7 +683,7 @@ export default function Dashboard() {
     if (!t) return nav("/login", { replace: true });
     setTasks(prev => prev.map(task => task.id === id ? { ...task, deadline: newDeadline } : task));
     try {
-      const res = await fetch(`${API}/tasks/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify({ deadline: newDeadline }) });
+      const res = await fetch(`${API_BASE}/tasks/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify({ deadline: newDeadline }) });
       if (!res.ok) await fetchTasks();
     } catch { await fetchTasks(); }
   }
@@ -696,7 +696,7 @@ export default function Dashboard() {
     setTasks((prev) => prev.filter((task) => task.id !== id));
 
     try {
-      const res = await fetch(`${API}/tasks/${id}/complete`, {
+      const res = await fetch(`${API_BASE}/tasks/${id}/complete`, {
         method: "PATCH",
         headers: { Authorization: `Bearer ${t}` },
       });
@@ -723,7 +723,7 @@ export default function Dashboard() {
     if (!t || !surveyTaskId) { setShowTaskSurvey(false); return; }
     setSubmittingTaskSurvey(true);
     try {
-      await fetch(`${API}/feedback/task`, {
+      await fetch(`${API_BASE}/feedback/task`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` },
         body: JSON.stringify({
@@ -755,7 +755,7 @@ export default function Dashboard() {
     setShowEODModal(true);
 
     try {
-      const res = await fetch(`${API}/feedback/daily/${toDateStr(new Date())}`, {
+      const res = await fetch(`${API_BASE}/feedback/daily/${toDateStr(new Date())}`, {
         headers: { Authorization: `Bearer ${t}` },
       });
       if (res.ok) {
@@ -780,7 +780,7 @@ export default function Dashboard() {
     if (!t) return;
     setSubmittingEOD(true);
     try {
-      await fetch(`${API}/feedback/daily`, {
+      await fetch(`${API_BASE}/feedback/daily`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` },
         body: JSON.stringify({
@@ -815,7 +815,7 @@ export default function Dashboard() {
 
   async function signOut() {
     const rt = sessionStorage.getItem("refresh_token");
-    if (rt) { try { await fetch(`${API}/auth/logout`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refresh_token: rt }) }); } catch {} }
+    if (rt) { try { await fetch(`${API_BASE}/auth/logout`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refresh_token: rt }) }); } catch {} }
     void syncTauriWidgetToken(null);
     sessionStorage.clear(); localStorage.clear(); nav("/login", { replace: true });
   }
@@ -1222,6 +1222,11 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="header-row-2" aria-label="Quick actions">
+          {import.meta.env.DEV && (
+            <span className="header-dev-badge" title="UI is served by Vite (live reload). API stays on :8000.">
+              Live reload
+            </span>
+          )}
           <button
             type="button"
             className="widget-show-btn widget-show-btn--hero"

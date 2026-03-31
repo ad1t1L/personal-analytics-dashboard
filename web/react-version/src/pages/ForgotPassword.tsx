@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "../login.css";
-
-const API = "http://localhost:8000";
+import { API_BASE } from "../apiBase.ts";
 
 export default function ForgotPassword() {
   const nav = useNavigate();
@@ -24,7 +23,7 @@ export default function ForgotPassword() {
 
     setLoading(true);
     try {
-      const res = await fetch(`${API}/auth/forgot-password`, {
+      const res = await fetch(`${API_BASE}/auth/forgot-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: trimmed }),

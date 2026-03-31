@@ -5,9 +5,16 @@ Usage (from repo root): python launcher/start_dashboard.py
 
 Environment:
   PAD_LAUNCH=tauri|browser|none   (default: tauri)
-  PAD_TAURI_BINARY=/path/to/app   optional; overrides auto-detected Tauri binary
+  PAD_TAURI_USE_BINARY=1|0        (default: 0) If 1, prefer a built desktoptauri-widget binary under
+                                  src-tauri/target/{debug,release}/. If 0 (default), run
+                                  `npm run tauri:dev` (Vite on :5173) so UI changes show without
+                                  rebuilding the Rust app. Set 1 only when you want the packaged binary.
+  PAD_TAURI_BINARY=/path/to/app   optional; overrides auto-detected Tauri binary (implies using binary)
   PAD_WEBKIT_SAFE=1|0             (default: 1 on Linux) WebKitGTK workarounds for frozen/blank
                                   webviews on Debian/Parrot/VMs. Set 0 if you want GPU path.
+  PAD_BUILD_FRONTEND=1|0          (default: 0) If 1, run `npm run build` in web/react-version before
+                                  starting (refreshes dist/ for the API + browser; not needed for
+                                  Tauri dev, which uses Vite).
 """
 from __future__ import annotations
 
@@ -92,6 +99,13 @@ def env_for_tauri_child() -> dict[str, str]:
     return env
 
 
+def _prefer_tauri_binary() -> bool:
+    if os.environ.get("PAD_TAURI_BINARY"):
+        return True
+    v = os.environ.get("PAD_TAURI_USE_BINARY", "0").strip().lower()
+    return v in ("1", "true", "yes", "on")
+
+
 def launch_client(root: Path, base: str) -> subprocess.Popen | None:
     mode = launch_mode()
     if mode == "none":
@@ -103,25 +117,7 @@ def launch_client(root: Path, base: str) -> subprocess.Popen | None:
     if mode != "tauri":
         raise LaunchError(f"Unknown PAD_LAUNCH={mode!r}; use tauri, browser, or none.")
 
-    if custom := os.environ.get("PAD_TAURI_BINARY"):
-        p = Path(custom).expanduser()
-        if not p.is_file():
-            raise LaunchError(f"PAD_TAURI_BINARY not found: {p}")
-        return subprocess.Popen([str(p)], cwd=str(root), env=env_for_tauri_child())
-
-    for cand in _tauri_binary_candidates(root):
-        if cand.is_file():
-            return subprocess.Popen([str(cand)], cwd=str(root), env=env_for_tauri_child())
-
     react = root / "web" / "react-version"
-    npm = shutil.which("npm")
-    if not npm:
-        raise LaunchError(
-            "Tauri binary not found. Either:\n"
-            f"  cd {react} && npm install && npm run tauri:build\n"
-            "or install Node/npm and re-run (dev mode will run `npm run tauri:dev`)."
-        )
-
     env = env_for_tauri_child()
     kwargs: dict = {
         "cwd": str(react),
@@ -133,6 +129,42 @@ def launch_client(root: Path, base: str) -> subprocess.Popen | None:
         kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
     else:
         kwargs["start_new_session"] = True
+
+    if custom := os.environ.get("PAD_TAURI_BINARY"):
+        p = Path(custom).expanduser()
+        if not p.is_file():
+            raise LaunchError(f"PAD_TAURI_BINARY not found: {p}")
+        return subprocess.Popen([str(p)], cwd=str(root), env=env_for_tauri_child())
+
+    # Default: Vite dev server so ./start-dashboard.sh reflects latest React changes without
+    # rebuilding the Rust binary (a stale target/debug binary would otherwise hide UI updates).
+    if not _prefer_tauri_binary():
+        npm = shutil.which("npm")
+        if npm and (react / "package.json").is_file():
+            print(
+                "Launching Tauri in dev mode (Vite :5173). "
+                "Set PAD_TAURI_USE_BINARY=1 to use src-tauri/target/*/desktoptauri-widget instead.",
+                file=sys.stderr,
+            )
+            return subprocess.Popen([npm, "run", "tauri:dev"], **kwargs)
+
+    for cand in _tauri_binary_candidates(root):
+        if cand.is_file():
+            print(
+                f"Using Tauri binary: {cand} (set PAD_TAURI_USE_BINARY=0 for `npm run tauri:dev`).",
+                file=sys.stderr,
+            )
+            return subprocess.Popen([str(cand)], cwd=str(root), env=env_for_tauri_child())
+
+    npm = shutil.which("npm")
+    if not npm:
+        raise LaunchError(
+            "No Tauri binary under src-tauri/target/ and npm not found. Either:\n"
+            f"  cd {react} && npm install && npm run tauri:build\n"
+            "or install Node/npm and re-run (dev mode will run `npm run tauri:dev`)."
+        )
+
+    print("No Tauri binary found; using `npm run tauri:dev`.", file=sys.stderr)
     return subprocess.Popen([npm, "run", "tauri:dev"], **kwargs)
 
 
@@ -153,8 +185,25 @@ def wait_for_server(base: str, attempts: int = 60) -> bool:
     return False
 
 
+def maybe_rebuild_frontend(root: Path) -> None:
+    """Refresh dist/ when PAD_BUILD_FRONTEND=1 (browser + API static SPA; not used by Tauri dev)."""
+    v = os.environ.get("PAD_BUILD_FRONTEND", "0").strip().lower()
+    if v not in ("1", "true", "yes", "on"):
+        return
+    react = root / "web" / "react-version"
+    npm = shutil.which("npm")
+    if not npm or not (react / "package.json").is_file():
+        print("PAD_BUILD_FRONTEND=1 but npm or web/react-version/package.json missing.", file=sys.stderr)
+        sys.exit(1)
+    print("Running npm run build in web/react-version (PAD_BUILD_FRONTEND=1)...", file=sys.stderr)
+    r = subprocess.run([npm, "run", "build"], cwd=str(react), env=os.environ.copy())
+    if r.returncode != 0:
+        sys.exit(r.returncode)
+
+
 def main() -> None:
     root = project_root()
+    maybe_rebuild_frontend(root)
     py = find_python(root)
     dist = root / "web" / "react-version" / "dist"
     if not dist.is_dir():
