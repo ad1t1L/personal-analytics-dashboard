@@ -26,3 +26,7 @@ database/app.db
 # Web
 node_modules/
 dist/
+src-tauri/
+
+# Launcher binaries (built with launcher/build.sh)
+launcher/dist/

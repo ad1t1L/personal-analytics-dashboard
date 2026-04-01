@@ -76,6 +76,26 @@ python --version
 git clone https://github.com/ITSC-4155-Spring-2026-Team-11/personal-analytics-dashboard.git
 cd personal-analytics-dashboard
 
+## Quick Start (recommended)
+
+On a fresh machine with Python 3.10+ and Node.js installed, you can run:
+
+```bash
+./start-dashboard.sh
+```
+
+The script will:
+- create/use a Python virtual environment
+- install backend dependencies
+- build the React frontend if `web/react-version/dist/` is missing
+- start the API and open the app (Tauri if available, otherwise browser)
+
+On Windows:
+
+```bat
+start-dashboard.bat
+```
+
 ## 3 Backend Setup (API Server)
 
 Navigate to the backend directory:

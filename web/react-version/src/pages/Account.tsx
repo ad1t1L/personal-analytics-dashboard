@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-
-const API = "http://localhost:8000";
+import { API_BASE } from "../apiBase.ts";
 
 type Session = { email?: string; loginTime?: string };
 
@@ -81,7 +80,7 @@ export default function Account() {
     const token = sessionStorage.getItem("access_token");
     if (!token) return;
     try {
-      const res = await fetch(`${API}/auth/2fa/status`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`${API_BASE}/auth/2fa/status`, { headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) {
         const data = await res.json();
         setTotpEnabled(!!data.totp_enabled);
@@ -99,7 +98,7 @@ export default function Account() {
     const refreshToken = sessionStorage.getItem("refresh_token");
     if (refreshToken) {
       try {
-        await fetch(`${API}/auth/logout`, {
+        await fetch(`${API_BASE}/auth/logout`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ refresh_token: refreshToken }),
@@ -147,7 +146,7 @@ export default function Account() {
     if (newPw !== confirmPw) return setPwErr("Passwords do not match.");
     setPwSaving(true);
     try {
-      const res = await fetch(`${API}/auth/change-password`, {
+      const res = await fetch(`${API_BASE}/auth/change-password`, {
         method: "POST",
         headers: getAuthHeaders(),
         body: JSON.stringify({ current_password: currentPw, new_password: newPw }),
@@ -168,7 +167,7 @@ export default function Account() {
   async function start2FASetup() {
     setTwoFAMessage(null); setTwoFALoading(true);
     try {
-      const res = await fetch(`${API}/auth/2fa/setup`, { method: "POST", headers: getAuthHeaders() });
+      const res = await fetch(`${API_BASE}/auth/2fa/setup`, { method: "POST", headers: getAuthHeaders() });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Setup failed");
       setTwoFASetup({ qr_base64: data.qr_base64, secret: data.secret });
@@ -183,7 +182,7 @@ export default function Account() {
     if (code.length !== 6) { setTwoFAMessage({ type: "err", text: "Enter the 6-digit code." }); return; }
     setTwoFALoading(true); setTwoFAMessage(null);
     try {
-      const res = await fetch(`${API}/auth/2fa/verify`, {
+      const res = await fetch(`${API_BASE}/auth/2fa/verify`, {
         method: "POST", headers: getAuthHeaders(), body: JSON.stringify({ code }),
       });
       const data = await res.json();
@@ -200,7 +199,7 @@ export default function Account() {
     if (code.length !== 6) { setTwoFAMessage({ type: "err", text: "Enter your 6-digit code." }); return; }
     setTwoFALoading(true); setTwoFAMessage(null);
     try {
-      const res = await fetch(`${API}/auth/2fa/disable`, {
+      const res = await fetch(`${API_BASE}/auth/2fa/disable`, {
         method: "POST", headers: getAuthHeaders(), body: JSON.stringify({ code }),
       });
       const data = await res.json();
@@ -215,7 +214,7 @@ export default function Account() {
   async function enableEmail2FA() {
     setTwoFALoading(true); setTwoFAMessage(null);
     try {
-      const res = await fetch(`${API}/auth/2fa/enable-email`, { method: "POST", headers: getAuthHeaders() });
+      const res = await fetch(`${API_BASE}/auth/2fa/enable-email`, { method: "POST", headers: getAuthHeaders() });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Enable failed");
       setTwoFAMessage({ type: "ok", text: "Email 2FA enabled." });
@@ -228,7 +227,7 @@ export default function Account() {
   async function disableEmail2FA() {
     setTwoFALoading(true); setTwoFAMessage(null);
     try {
-      const res = await fetch(`${API}/auth/2fa/disable-email`, { method: "POST", headers: getAuthHeaders() });
+      const res = await fetch(`${API_BASE}/auth/2fa/disable-email`, { method: "POST", headers: getAuthHeaders() });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Disable failed");
       setTwoFAMessage({ type: "ok", text: "Email 2FA disabled." });

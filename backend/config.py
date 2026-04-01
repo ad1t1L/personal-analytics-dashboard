@@ -26,13 +26,27 @@ VERIFICATION_TOKEN_EXPIRE_HOURS = 24
 PASSWORD_RESET_TOKEN_EXPIRE_HOURS = 1
 
 # ── Email (SMTP) settings ─────────────────────────────────────────────────────
-SMTP_HOST     = os.environ.get("SMTP_HOST",     "smtp.gmail.com")
-SMTP_PORT     = int(os.environ.get("SMTP_PORT", "587"))
-SMTP_USER     = os.environ.get("SMTP_USER",     "speedka65@gmail.com")
-SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "goqo xlfy gcig zabg")
-FROM_EMAIL    = os.environ.get("FROM_EMAIL",    "no-reply@yourapp.com")
+# Set SMTP_USER + SMTP_PASSWORD in .env (Gmail: use an App Password, not your login password).
+SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com").strip()
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+SMTP_USER = os.environ.get("SMTP_USER", "").strip()
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "").strip()
+FROM_EMAIL = os.environ.get("FROM_EMAIL", "").strip() or SMTP_USER or "no-reply@localhost"
 
-APP_BASE_URL  = os.environ.get("APP_BASE_URL",  "http://localhost:8000")
+APP_BASE_URL = os.environ.get("APP_BASE_URL", "http://localhost:8000").strip()
+
+_smtp_configured = bool(SMTP_USER and SMTP_PASSWORD)
+_explicit_smtp = os.environ.get("DISABLE_SMTP_SENDING", "").strip().lower()
+
+# When SMTP is not configured, skip email (no verification emails; register auto-verifies).
+# Set DISABLE_SMTP_SENDING=0 in .env only when SMTP_USER and SMTP_PASSWORD are set.
+# Set DISABLE_SMTP_SENDING=1 to force skip even if credentials exist (local dev).
+if _explicit_smtp in ("1", "true", "yes"):
+    DISABLE_SMTP_SENDING = True
+elif _explicit_smtp in ("0", "false", "no"):
+    DISABLE_SMTP_SENDING = not _smtp_configured
+else:
+    DISABLE_SMTP_SENDING = not _smtp_configured
 
 # ── Password rules ────────────────────────────────────────────────────────────
 MIN_PASSWORD_LENGTH = 8

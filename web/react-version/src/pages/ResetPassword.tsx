@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import "../login.css";
-
-const API = "http://localhost:8000";
+import { API_BASE } from "../apiBase.ts";
 
 type StrengthState = {
   show: boolean;
@@ -97,7 +96,7 @@ export default function ResetPassword() {
 
     setLoading(true);
     try {
-      const res = await fetch(`${API}/auth/reset-password`, {
+      const res = await fetch(`${API_BASE}/auth/reset-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, password }),

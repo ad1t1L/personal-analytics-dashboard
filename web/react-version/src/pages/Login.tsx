@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { API_BASE } from "../apiBase.ts";
+import { syncTauriWidgetToken } from "../tauriWidgetBridge.ts";
 
 type Tab = "login" | "signup";
 
@@ -20,8 +22,6 @@ type StrengthState = {
   bg: string;
   label: string;
 };
-
-const API = "http://localhost:8000";
 
 function isValidEmail(email: string) {
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -225,7 +225,7 @@ export default function Login() {
       formData.append("username", email);
       formData.append("password", pass);
 
-      const res = await fetch(`${API}/auth/login`, {
+      const res = await fetch(`${API_BASE}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: formData.toString(),
@@ -286,11 +286,18 @@ export default function Login() {
         localStorage.removeItem("planner_session");
       }
 
+      void syncTauriWidgetToken(data.access_token);
+
       setLoginSuccess(true);
       setTimeout(() => nav("/dashboard", { replace: true }), 1800);
 
     } catch {
-      showToast("login", "error", "❌", "Could not connect to server. Is the backend running?");
+      showToast(
+        "login",
+        "error",
+        "❌",
+        "Could not connect to the API. Start the backend on port 8000 (from repo root: python launcher/start_dashboard.py), or use ./start-dashboard.sh which starts the API and then Tauri.",
+      );
     } finally {
       setLoginLoading(false);
     }
@@ -301,7 +308,7 @@ export default function Login() {
     setTwoFAError("");
     setSendEmailLoading(true);
     try {
-      const res = await fetch(`${API}/auth/2fa/send-email-code`, {
+      const res = await fetch(`${API_BASE}/auth/2fa/send-email-code`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pending_2fa_token: pending2FA }),
@@ -329,7 +336,7 @@ export default function Login() {
     }
     setTwoFALoading(true);
     try {
-      const res = await fetch(`${API}/auth/login/2fa`, {
+      const res = await fetch(`${API_BASE}/auth/login/2fa`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pending_2fa_token: pending2FA, code }),
@@ -353,6 +360,7 @@ export default function Login() {
         localStorage.removeItem("refresh_token");
         localStorage.removeItem("planner_session");
       }
+      void syncTauriWidgetToken(data.access_token);
       setLoginSuccess(true);
       setTimeout(() => nav("/dashboard", { replace: true }), 1800);
     } catch {
@@ -437,7 +445,7 @@ export default function Login() {
     setSignupLoading(true);
 
     try {
-      const res = await fetch(`${API}/auth/register`, {
+      const res = await fetch(`${API_BASE}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, email, password: pass }),
@@ -456,7 +464,12 @@ export default function Login() {
       setTimeout(() => resetSignup(), 2200);
 
     } catch {
-      showToast("signup", "error", "❌", "Could not connect to server. Is the backend running?");
+      showToast(
+        "signup",
+        "error",
+        "❌",
+        "Could not connect to the API. Start the backend on port 8000 (from repo root: python launcher/start_dashboard.py), or use ./start-dashboard.sh which starts the API and then Tauri.",
+      );
     } finally {
       setSignupLoading(false);
     }

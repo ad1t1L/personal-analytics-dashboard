@@ -1,7 +1,10 @@
 ﻿import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import TasksAtAGlanceWidget from "../components/TasksAtAGlanceWidget.tsx";
+import { emitTasksUpdatedIfTauri, syncTauriWidgetToken } from "../tauriWidgetBridge.ts";
+import { showWidgetRobust } from "../widgetInvoke.ts";
+import { API_BASE } from "../apiBase.ts";
 
-const API = "http://localhost:8000";
 
 type Session = { email?: string; loginTime?: string; name?: string };
 
@@ -375,6 +378,7 @@ export default function Dashboard() {
   const [totpEnabled, setTotpEnabled] = useState<boolean | null>(null);
   const [email2FAEnabled, setEmail2FAEnabled] = useState<boolean | null>(null);
   const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [showTaskGlance, setShowTaskGlance] = useState(false);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [form, setForm] = useState<TaskForm>(blankForm());
@@ -455,11 +459,12 @@ export default function Dashboard() {
     if (!t) { nav("/login", { replace: true }); return; }
     setLoading(true); setErr(null);
     try {
-      const res = await fetch(`${API}/tasks/`, { headers: { Authorization: `Bearer ${t}` } });
+      const res = await fetch(`${API_BASE}/tasks/`, { headers: { Authorization: `Bearer ${t}` } });
       if (res.status === 401) { sessionStorage.clear(); nav("/login", { replace: true }); return; }
       const data = await res.json();
       setTasks(Array.isArray(data.tasks) ? data.tasks : []);
-    } catch { setErr("Could not load tasks. Is the backend running on :8000?"); }
+      void emitTasksUpdatedIfTauri();
+    } catch { setErr("Could not load tasks. Start the API on port 8000 (e.g. python launcher/start_dashboard.py from repo root)."); }
     finally { setLoading(false); }
   }
 
@@ -468,7 +473,7 @@ export default function Dashboard() {
     if (!t) return;
     setScheduleLoading(true);
     try {
-      const res = await fetch(`${API}/schedules/today`, { headers: { Authorization: `Bearer ${t}` } });
+      const res = await fetch(`${API_BASE}/schedules/today`, { headers: { Authorization: `Bearer ${t}` } });
       if (res.ok) setSchedule(await res.json());
     } catch {}
     finally { setScheduleLoading(false); }
@@ -476,11 +481,17 @@ export default function Dashboard() {
 
   useEffect(() => { if (session) { fetchTasks(); fetchSchedule(); } }, [session]);
 
+  useEffect(() => {
+    if (!session) return;
+    const t = sessionStorage.getItem("access_token");
+    if (t) void syncTauriWidgetToken(t);
+  }, [session]);
+
   const fetch2FAStatus = useCallback(async () => {
     const token = sessionStorage.getItem("access_token");
     if (!token) return;
     try {
-      const res = await fetch(`${API}/auth/2fa/status`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`${API_BASE}/auth/2fa/status`, { headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) { const data = await res.json(); setTotpEnabled(!!data.totp_enabled); setEmail2FAEnabled(!!data.email_2fa_enabled); }
     } catch { setTotpEnabled(false); setEmail2FAEnabled(false); }
   }, []);
@@ -505,7 +516,7 @@ export default function Dashboard() {
     if (!dayPopup) { setDayPopupSchedule(null); return; }
     const t = sessionStorage.getItem("access_token");
     if (!t) return;
-    fetch(`${API}/schedules/date/${dayPopup}`, { headers: { Authorization: `Bearer ${t}` } })
+    fetch(`${API_BASE}/schedules/date/${dayPopup}`, { headers: { Authorization: `Bearer ${t}` } })
       .then(r => r.ok ? r.json() : null)
       .then(data => setDayPopupSchedule(data ?? null))
       .catch(() => setDayPopupSchedule(null));
@@ -634,11 +645,8 @@ export default function Dashboard() {
       const dates = getRecurrenceDates(form);
       const basePayload = formToPayload(form);
       for (const date of dates) {
-        const deadline = (form.task_type === "due_by" || form.task_type === "set_time")
-          ? date
-          : (form.recurrence !== "once" ? date : null);
-        const payload = { ...basePayload, deadline };
-        const res = await fetch(`${API}/tasks/`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify(payload) });
+        const payload = { ...basePayload, deadline: (form.task_type === "due_by" || form.task_type === "set_time") ? date : null };
+        const res = await fetch(`${API_BASE}/tasks/`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify(payload) });
         if (res.status === 401) { sessionStorage.clear(); nav("/login", { replace: true }); return; }
         if (!res.ok) { setCreateErr(friendlyError(await res.text(), "Failed to create task.")); return; }
       }
@@ -662,13 +670,19 @@ export default function Dashboard() {
     if (!t) return nav("/login", { replace: true });
     setEditing(true); setEditErr(null);
     try {
-      const res = await fetch(`${API}/tasks/${editTaskId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` },
-        body: JSON.stringify(formToPayload(editForm)),
-      });
+      // Always update the original task
+      const res = await fetch(`${API_BASE}/tasks/${editTaskId}`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify(formToPayload(editForm)) });
       if (res.status === 401) { sessionStorage.clear(); nav("/login", { replace: true }); return; }
-      if (!res.ok) { setEditErr(friendlyError(await res.text(), "Failed to update task.")); return; }
+      if (!res.ok) { const msg = await res.text(); setEditErr(msg || "Failed to update task."); return; }
+      // If recurrence is set (not once), create additional copies from day 2 onward
+      if (editForm.recurrence && editForm.recurrence !== "once") {
+        const dates = getRecurrenceDates(editForm).slice(1); // skip first, already updated
+        const basePayload = formToPayload(editForm);
+        for (const date of dates) {
+          const payload = { ...basePayload, deadline: (editForm.task_type === "due_by" || editForm.task_type === "set_time") ? date : null };
+          await fetch(`${API_BASE}/tasks/`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify(payload) });
+        }
+      }
       setShowEditModal(false); await fetchTasks();
     } catch { setEditErr("Failed to update task. Is the backend running?"); }
     finally { setEditing(false); }
@@ -682,7 +696,7 @@ export default function Dashboard() {
     const prev = tasks;
     setTasks(x => x.filter(task => task.id !== id));
     try {
-      const res = await fetch(`${API}/tasks/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${t}` } });
+      const res = await fetch(`${API_BASE}/tasks/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${t}` } });
       if (res.status === 401) { sessionStorage.clear(); nav("/login", { replace: true }); return; }
       if (!res.ok) { setTasks(prev); setErr("Could not delete task."); }
     } catch { setTasks(prev); setErr("Could not delete task."); }
@@ -702,7 +716,7 @@ export default function Dashboard() {
     setTasks(prev => prev.filter(tk => !toDelete.find(d => d.id === tk.id)));
     try {
       await Promise.all(toDelete.map(tk =>
-        fetch(`${API}/tasks/${tk.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${t}` } })
+        fetch(`${API_BASE}/tasks/${tk.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${t}` } })
       ));
       await fetchTasks();
     } catch { setErr("Could not delete all recurring tasks."); await fetchTasks(); }
@@ -721,7 +735,7 @@ export default function Dashboard() {
     if (!t) return nav("/login", { replace: true });
     setTasks(prev => prev.map(task => task.id === id ? { ...task, deadline: newDeadline } : task));
     try {
-      const res = await fetch(`${API}/tasks/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify({ deadline: newDeadline }) });
+      const res = await fetch(`${API_BASE}/tasks/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify({ deadline: newDeadline }) });
       if (!res.ok) await fetchTasks();
     } catch { await fetchTasks(); }
   }
@@ -731,7 +745,10 @@ export default function Dashboard() {
     if (!t) return nav("/login", { replace: true });
     setTasks((prev) => prev.filter((task) => task.id !== id));
     try {
-      const res = await fetch(`${API}/tasks/${id}/complete`, { method: "PATCH", headers: { Authorization: `Bearer ${t}` } });
+      const res = await fetch(`${API_BASE}/tasks/${id}/complete`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${t}` },
+      });
       if (res.status === 401) { sessionStorage.clear(); nav("/login", { replace: true }); return; }
       if (!res.ok) { await fetchTasks(); return; }
     } catch { await fetchTasks(); return; }
@@ -747,7 +764,7 @@ export default function Dashboard() {
     if (!t || !surveyTaskId) { setShowTaskSurvey(false); return; }
     setSubmittingTaskSurvey(true);
     try {
-      await fetch(`${API}/feedback/task`, {
+      await fetch(`${API_BASE}/feedback/task`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` },
         body: JSON.stringify({
@@ -770,7 +787,9 @@ export default function Dashboard() {
     setEodOverall(0); setEodNotes(""); setEodSuccess(false);
     setShowEODModal(true);
     try {
-      const res = await fetch(`${API}/feedback/daily/${toDateStr(new Date())}`, { headers: { Authorization: `Bearer ${t}` } });
+      const res = await fetch(`${API_BASE}/feedback/daily/${toDateStr(new Date())}`, {
+        headers: { Authorization: `Bearer ${t}` },
+      });
       if (res.ok) {
         const data = await res.json();
         if (data.exists && data.data) {
@@ -793,7 +812,7 @@ export default function Dashboard() {
     if (!t) return;
     setSubmittingEOD(true);
     try {
-      await fetch(`${API}/feedback/daily`, {
+      await fetch(`${API_BASE}/feedback/daily`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` },
         body: JSON.stringify({
@@ -815,9 +834,20 @@ export default function Dashboard() {
     setSubmittingEOD(false);
   }
 
+  async function openFloatingWidget() {
+    try {
+      await showWidgetRobust();
+    } catch {
+      setErr(
+        "Show widget only works in the desktop (Tauri) app. From the repo run ./start-dashboard.sh, or: cd web/react-version && npm run build && npm run tauri:dev"
+      );
+    }
+  }
+
   async function signOut() {
     const rt = sessionStorage.getItem("refresh_token");
-    if (rt) { try { await fetch(`${API}/auth/logout`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refresh_token: rt }) }); } catch {} }
+    if (rt) { try { await fetch(`${API_BASE}/auth/logout`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refresh_token: rt }) }); } catch {} }
+    void syncTauriWidgetToken(null);
     sessionStorage.clear(); localStorage.clear(); nav("/login", { replace: true });
   }
 
@@ -1176,13 +1206,40 @@ export default function Dashboard() {
 
   return (
     <>
-      <header>
-        <div className="brand">📋 PlannerHub</div>
-        <div className="user-info">
-          <span className="header-greeting">👋 {displayName}</span>
-          <button className="eod-btn" type="button" onClick={openEODModal}>End of Day Check-In</button>
-          <button className="ghost-btn" type="button" onClick={() => nav("/account")}>Account</button>
-          <button className="signout-btn" onClick={signOut}>Sign Out</button>
+      <header className="header-shell">
+        <div className="header-row-1">
+          <div className="brand">📋 PlannerHub</div>
+          <div className="user-info user-info--compact">
+            <span className="header-greeting">👋 {displayName}</span>
+            <button className="ghost-btn" type="button" onClick={() => nav("/account")}>Account</button>
+            <button className="signout-btn" onClick={signOut}>Sign Out</button>
+          </div>
+        </div>
+        <div className="header-row-2" aria-label="Quick actions">
+          {import.meta.env.DEV && (
+            <span className="header-dev-badge" title="UI is served by Vite (live reload). API stays on :8000.">
+              Live reload
+            </span>
+          )}
+          <button
+            type="button"
+            className="widget-show-btn widget-show-btn--hero"
+            onClick={() => void openFloatingWidget()}
+            title="Opens the small floating task window (also: system tray → Show Widget)"
+          >
+            Show widget
+          </button>
+          <button
+            type="button"
+            className="glance-btn"
+            onClick={() => setShowTaskGlance(true)}
+            title="Quick summary of open tasks by urgency"
+          >
+            ✨ At a glance
+          </button>
+          <button className="eod-btn" type="button" onClick={openEODModal}>
+            End of Day Check-In
+          </button>
         </div>
       </header>
 
@@ -1204,6 +1261,14 @@ export default function Dashboard() {
         <aside className="sidebar">
           <div className="side-title">Dashboard</div>
           <button className="side-pill" type="button">Taskboard</button>
+          <button
+            type="button"
+            className="widget-show-btn widget-show-btn--sidebar"
+            onClick={() => void openFloatingWidget()}
+            title="Opens the floating task window"
+          >
+            Show widget
+          </button>
           <button className="side-link" type="button" onClick={() => nav("/account")}>Account settings</button>
           <button className="side-link side-link-danger" type="button" onClick={signOut}>Sign out</button>
         </aside>
@@ -1215,7 +1280,15 @@ export default function Dashboard() {
                 <h1 className="panel-title">My Tasks</h1>
                 <p className="panel-sub">{dedupeForList(tasks).length} task{dedupeForList(tasks).length !== 1 ? "s" : ""} total</p>
               </div>
-              <div style={{ display: "flex", gap: 8 }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <button
+                  type="button"
+                  className="widget-show-btn widget-show-btn--panel"
+                  onClick={() => void openFloatingWidget()}
+                  title="Floating task window"
+                >
+                  Show widget
+                </button>
                 <button className="ghost-btn" type="button" onClick={fetchTasks}>↻ Refresh</button>
                 <button className="primary-btn" type="button" onClick={() => openAddModal()}>+ Add Task</button>
               </div>
@@ -1526,6 +1599,13 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      <TasksAtAGlanceWidget
+        open={showTaskGlance}
+        onClose={() => setShowTaskGlance(false)}
+        tasks={tasks}
+        loading={loading}
+      />
     </>
   );
 }
