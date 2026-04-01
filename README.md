@@ -43,7 +43,7 @@ All computation is centralized in the backend to ensure consistency across platf
 personal-analytics-dashboard/
 ├── backend/ # API, scheduler, ML logic
 ├── web/ # Browser-based UI
-├── desktop/ # Windows application
+├── desktop/ # Windows application and widget
 ├── database/ # SQLite database file + schema
 ├── docs/ # Design and project documentation
 └── README.md
@@ -133,32 +133,28 @@ http://127.0.0.1:8000/docs
 
 ## 4 Desktop Application Setup (PyQt)
 
-Open a new terminal window (leave backend running).
-
-Navigate to the desktop directory:
-cd desktop
-
-
-(Optional) Activate the same virtual environment if not already active.
-
-Install desktop dependencies:
-pip install -r requirements.txt
-
-
-Run the desktop application:
-python main.py
+cd web/react-version
+npm run build
+npm run tauri dev
 
 ## 5 Web Client Setup
 
 navigate to the react-version directory:
 cd web/react-version
-Run: npm install
 
-Run: npm run dev
+Run: 
+
+npm install
+npm run build
+npm run dev
 
 ## 6 Running the Full System
 
-To run everything together.
+Use the startup script:
+
+./start-dashboard.sh
+
+Or run everything separately.
 
 1. Start the backend API:
 
@@ -166,8 +162,9 @@ python -m uvicorn backend.app:app --reload
 
 2. Run the desktop app:
 
-cd desktop
-python main.py
+cd web/react-version
+npm run build
+npm run tauri dev
 
 3. Open the web client:
 
@@ -183,7 +180,6 @@ pip install uvicorn
 -- ModuleNotFoundError
 
 Make sure:
-
 1. Virtual environment is activated
 
 2. Dependencies are installed
@@ -223,8 +219,8 @@ cd desktop
 uvicorn app:app --reload
 
 # Start desktop:
-cd desktop
-python main.py
+cd web/react-version
+npm run tauri dev
 
 ---
 
@@ -238,4 +234,4 @@ ML components improve personalization:
 
 Supervised model estimates stress from schedule features.
 
-Q-learning adapts scheduling decisions based on user feedback.
+Exponential moving average (EMA) adapts scheduling decisions based on user feedback.
