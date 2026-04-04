@@ -5,7 +5,8 @@ A cross-platform personal analytics and scheduling application that generates da
 
 This project includes:
 - A web-based dashboard
-- A Windows desktop application
+- A Tauri desktop application
+- A Python desktop client (PySide6)
 - A shared Python backend for scheduling, analytics, and optimization
 
 ---
@@ -28,11 +29,14 @@ The system follows a centralized backend design:
 - **Backend (Python / FastAPI)**  
   Handles scheduling logic, task storage, feedback processing, and machine learning.
 
-- **Web Client (HTML / CSS / JavaScript)**  
+- **Web Client (React / Vite)**  
   Provides an interactive browser-based dashboard.
 
-- **Desktop Client (Python GUI)**  
-  Windows application that communicates with the same backend API.
+- **Tauri Desktop App**  
+  Wraps the React frontend in a native desktop window via Tauri (Rust).
+
+- **Python Desktop Client (PySide6)**  
+  Alternative desktop application that communicates with the same backend API.
 
 All computation is centralized in the backend to ensure consistency across platforms.
 
@@ -40,58 +44,77 @@ All computation is centralized in the backend to ensure consistency across platf
 
 ## Project Structure
 
+```
 personal-analytics-dashboard/
-├── backend/ # API, scheduler, ML logic
-├── web/ # Browser-based UI
-├── desktop/ # Windows application and widget
-├── database/ # SQLite database file + schema
-├── docs/ # Design and project documentation
-└── README.md
+├── backend/        # FastAPI app, scheduler, ML logic
+├── web/            # React/Vite frontend + Tauri desktop wrapper
+├── desktop/        # Python/PySide6 desktop client
+├── launcher/       # Startup scripts (Python + Go)
+├── database/       # SQLite database file + schema
+├── docs/           # Design and project documentation
+└── requirements.txt
+```
 
 ---
 
 ## Installation & Setup
 
-Follow these steps to install **all required dependencies** and run the project locally.
+Follow these steps to install all required dependencies and run the project locally.
 
 ---
 
-## 1 Prerequisites
+## 1. Prerequisites
 
 ### Python
 - Python **3.10 or newer** is required.
 - Download from: https://www.python.org/downloads/
 
- **IMPORTANT (Windows users)**  
-During installation, make sure to check:
-
-Add Python to PATH:
+**IMPORTANT (Windows users)**  
+During installation, check "Add Python to PATH".
 
 Verify installation:
-```bash ```
-python --version 
+```bash
+python --version
+```
 
-### Rust
-- Download from https://rustup.rs/
+### Node.js
+- Required to build the React frontend.
+- Download from: https://nodejs.org/
 
-## 2 Clone the Repository
+Verify installation:
+```bash
+node --version
+npm --version
+```
 
+### Rust (for Tauri desktop app)
+- Required only if you want to run the Tauri desktop app.
+- Download from: https://rustup.rs/
+
+---
+
+## 2. Clone the Repository
+
+```bash
 git clone https://github.com/ITSC-4155-Spring-2026-Team-11/personal-analytics-dashboard.git
 cd personal-analytics-dashboard
+```
+
+---
 
 ## Quick Start (recommended)
 
-On a fresh machine with Python 3.10+ and Node.js installed, you can run:
+On a fresh machine with Python 3.10+ and Node.js installed, run:
 
 ```bash
 ./start-dashboard.sh
 ```
 
 The script will:
-- create/use a Python virtual environment
-- install backend dependencies
-- build the React frontend if `web/react-version/dist/` is missing
-- start the API and open the app (Tauri if available, otherwise browser)
+- Create/use a Python virtual environment
+- Install backend dependencies from `requirements.txt`
+- Build the React frontend if `web/react-version/dist/` is missing
+- Start the API and open the app (Tauri if available, otherwise browser)
 
 On Windows:
 
@@ -99,142 +122,117 @@ On Windows:
 start-dashboard.bat
 ```
 
-## 3 Backend Setup (API Server)
+---
 
-Navigate to the backend directory:
-cd backend
+## 3. Backend Setup (API Server)
 
+From the project root, create and activate a virtual environment:
 
-(Optional but recommended) Create a virtual environment:
-python -m venv venv
+```bash
+# Create venv
+python -m venv .venv
 
+# Activate (Windows)
+.venv\Scripts\activate
 
-Activate the virtual environment:
+# Activate (macOS / Linux)
+source .venv/bin/activate
+```
 
-Windows:
-venv\Scripts\activate
-
-
-macOS / Linux:
-source venv/bin/activate
-
-
-Install dependencies from root:
+Install dependencies:
+```bash
 pip install -r requirements.txt
+```
 
-
-Start the backend server:
-uvicorn app:app --reload
-
-
-The API will be available at:
-http://127.0.0.1:8000
-
-
-Interactive API docs:
-http://127.0.0.1:8000/docs
-
-## 4 Desktop Application Setup (PyQt)
-
-cd web/react-version
-npm run build
-npm run tauri dev
-
-## 5 Web Client Setup
-
-navigate to the react-version directory:
-cd web/react-version
-
-Run: 
-
-npm install
-npm run build
-npm run dev
-
-## 6 Running the Full System
-
-Use the startup script:
-
-./start-dashboard.sh
-
-Or run everything separately.
-
-1. Start the backend API:
-
+Start the backend server from the project root:
+```bash
 python -m uvicorn backend.app:app --reload
+```
 
-2. Run the desktop app:
+The API will be available at:  
+`http://127.0.0.1:8000`
 
-cd web/react-version
-npm run build
-npm run tauri dev
-
-3. Open the web client:
-
-Navigate to the react directory and run npm install (only needed one time, the first time you run the program)
-
-run: npm run dev
-
-## 7 Common Issues
-
--- uvicorn not found:
-pip install uvicorn
-
--- ModuleNotFoundError
-
-Make sure:
-1. Virtual environment is activated
-
-2. Dependencies are installed
-
-3. You are running commands from the correct directory
-
--- CORS errors in browser
-
-Ensure the backend is running and accessible at:
-http://127.0.0.1:8000
-
-
-### 
-1) Backend (API)
-```bash ```
-cd backend
-pip install -r requirements.txt
-uvicorn app:app --reload
-
-API runs at:
-
-http://127.0.0.1:8000
-
-Docs UI:
-
-http://127.0.0.1:8000/docs
-
-2) Web Client
-
-Open:
-web/index.html
-
-3) Desktop Client
-
-# Start backend:
-cd desktop
-uvicorn app:app --reload
-
-# Start desktop:
-cd web/react-version
-npm run tauri dev
+Interactive API docs:  
+`http://127.0.0.1:8000/docs`
 
 ---
 
-### Scheduling & ML Plan
+## 4. Tauri Desktop App Setup
+
+Requires Node.js and Rust (see Prerequisites).
+
+```bash
+cd web/react-version
+npm install
+npm run tauri:dev
+```
+
+---
+
+## 5. Web Client Setup
+
+```bash
+cd web/react-version
+npm install
+npm run dev
+```
+
+The dev server runs at `http://localhost:5173`.
+
+---
+
+## 6. Running the Full System
+
+Use the startup script (recommended):
+
+```bash
+./start-dashboard.sh   # macOS / Linux
+start-dashboard.bat    # Windows
+```
+
+Or run manually:
+
+1. Start the backend API (from project root):
+```bash
+python -m uvicorn backend.app:app --reload
+```
+
+2. Launch the Tauri desktop app:
+```bash
+cd web/react-version
+npm run tauri:dev
+```
+
+3. Or open the web client in a browser:
+```bash
+cd web/react-version
+npm run dev
+```
+
+---
+
+## 7. Common Issues
+
+**uvicorn not found:**
+```bash
+pip install uvicorn
+```
+
+**ModuleNotFoundError:**
+1. Make sure the virtual environment is activated
+2. Run `pip install -r requirements.txt` from the project root
+3. Run uvicorn from the project root (not from inside `backend/`)
+
+**CORS errors in browser:**  
+Ensure the backend is running and accessible at `http://127.0.0.1:8000`
+
+---
+
+## Scheduling & ML Plan
 
 This project uses a hybrid approach:
 
-Rule-based scheduler enforces hard constraints and creates a valid schedule.
-
-ML components improve personalization:
-
-Supervised model estimates stress from schedule features.
-
-Exponential moving average (EMA) adapts scheduling decisions based on user feedback.
+- **Rule-based scheduler** enforces hard constraints and creates a valid schedule.
+- **ML components** improve personalization:
+  - Supervised model estimates stress from schedule features.
+  - Exponential moving average (EMA) adapts scheduling decisions based on user feedback.
