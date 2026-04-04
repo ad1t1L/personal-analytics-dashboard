@@ -71,6 +71,9 @@ Verify installation:
 ```bash ```
 python --version 
 
+### Rust
+- Download from https://rustup.rs/
+
 ## 2 Clone the Repository
 
 git clone https://github.com/ITSC-4155-Spring-2026-Team-11/personal-analytics-dashboard.git
