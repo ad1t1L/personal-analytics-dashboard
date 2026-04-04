@@ -18,3 +18,6 @@ PyMySQL>=1.1.0
 # 2FA (TOTP for authenticator apps)
 pyotp>=2.9.0
 qrcode[pil]>=7.4.0
+
+# Desktop
+PySide6
