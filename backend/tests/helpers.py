@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import bootstrap_sys_path  # noqa: F401 — ensures repo root is on sys.path when run directly
+
 import backend.config as cfg
 
 

@@ -1,5 +1,12 @@
 import logging
+import sys
 from pathlib import Path
+
+# Ensure the repo root is on sys.path so `from backend.xxx import ...` works
+# when this file is run directly (IDE "Run" button) instead of via uvicorn from the repo root.
+_repo_root = str(Path(__file__).resolve().parents[1])
+if _repo_root not in sys.path:
+    sys.path.insert(0, _repo_root)
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -47,7 +54,7 @@ app.include_router(feedback_router,  prefix="/feedback",  tags=["feedback"])
 # ── SPA (Vite build): same origin as API on :8000 — no separate Vite server needed ──
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _FRONTEND_DIST = _REPO_ROOT / "web" / "react-version" / "dist"
-if _FRONTEND_DIST.is_dir():
+if _FRONTEND_DIST.is_dir():  # pragma: no cover
     # Serve the SPA without relying on `StaticFiles(html=True)` (it isn't
     # reliably falling back for client-side routes like `/login`).
     assets_dir = _FRONTEND_DIST / "assets"

@@ -8,6 +8,11 @@ python-multipart>=0.0.6
 pydantic[email-validation]>=2.5.0
 email-validator>=2.0.0
 requests
+httpx>=0.24.0
+
+# Tests (pytest + Starlette/FastAPI TestClient + coverage)
+pytest>=7.2.0
+pytest-cov>=4.0.0
 
 # DB
 sqlalchemy>=2.0.0

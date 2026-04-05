@@ -4,10 +4,12 @@ Shared fixtures: in-memory SQLite and DB session override so tests never touch d
 
 from __future__ import annotations
 
+import bootstrap_sys_path  # noqa: F401 — shared with test modules (Run Python File)
+
 import os
 
-# Force SQLite before any backend module imports the engine.
-os.environ.setdefault("USE_SQLITE", "1")
+# In-memory DB for tests; keep USE_SQLITE=1 so behavior matches local .env. config.py honors sqlite: URLs.
+os.environ["USE_SQLITE"] = "1"
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 
 import pytest

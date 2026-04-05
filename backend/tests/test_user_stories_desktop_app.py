@@ -9,6 +9,8 @@ Backend contract: authenticated /tasks and /schedules work from any client with 
 
 from __future__ import annotations
 
+import bootstrap_sys_path  # noqa: F401
+
 from backend.tests.helpers import auth_headers, login_form, register_verified_user
 
 

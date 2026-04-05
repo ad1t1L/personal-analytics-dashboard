@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import bootstrap_sys_path  # noqa: F401
+
 from datetime import date, timedelta
 
 import pytest

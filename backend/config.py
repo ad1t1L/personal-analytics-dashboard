@@ -7,11 +7,18 @@ load_dotenv()
 # DATABASE_URL is set in .env. For production, set DATABASE_URL to MySQL.
 # MySQL example: mysql+pymysql://user:password@localhost:3306/dbname
 USE_SQLITE = os.environ.get("USE_SQLITE", "").lower() in ("1", "true")
-DATABASE_URL = (
-    "sqlite:///database/app.db"
-    if USE_SQLITE
-    else os.environ.get("DATABASE_URL", "sqlite:///database/app.db")
-)
+_env_db = os.environ.get("DATABASE_URL", "").strip()
+_default_sqlite = "sqlite:///database/app.db"
+
+# USE_SQLITE=1: ignore non-SQLite URLs in .env (e.g. MySQL) and use file SQLite by default,
+# but still honor an explicit sqlite: URL (tests set sqlite:///:memory:).
+if USE_SQLITE:
+    if _env_db.lower().startswith("sqlite"):
+        DATABASE_URL = _env_db or _default_sqlite
+    else:
+        DATABASE_URL = _default_sqlite
+else:
+    DATABASE_URL = _env_db or _default_sqlite
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "CHANGE_ME_BEFORE_DEPLOY")
 

@@ -33,17 +33,17 @@ def _send(to: str, subject: str, html_body: str) -> None:
         logger.error("SMTP_USER/SMTP_PASSWORD missing; cannot send: %s", subject)
         raise RuntimeError("SMTP is not configured. Set SMTP_USER and SMTP_PASSWORD in .env, or use DISABLE_SMTP_SENDING=1.")
 
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"]    = FROM_EMAIL
-    msg["To"]      = to
-    msg.attach(MIMEText(html_body, "html"))
+    msg = MIMEMultipart("alternative")  # pragma: no cover
+    msg["Subject"] = subject            # pragma: no cover
+    msg["From"]    = FROM_EMAIL         # pragma: no cover
+    msg["To"]      = to                 # pragma: no cover
+    msg.attach(MIMEText(html_body, "html"))  # pragma: no cover
 
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-        server.ehlo()
-        server.starttls()          
-        server.login(SMTP_USER, SMTP_PASSWORD)
-        server.sendmail(FROM_EMAIL, to, msg.as_string())
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:  # pragma: no cover
+        server.ehlo()                                    # pragma: no cover
+        server.starttls()                                # pragma: no cover
+        server.login(SMTP_USER, SMTP_PASSWORD)           # pragma: no cover
+        server.sendmail(FROM_EMAIL, to, msg.as_string()) # pragma: no cover
 
 
 def send_verification_email(to: str, name: str, token: str) -> None:

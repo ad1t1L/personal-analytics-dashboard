@@ -6,6 +6,8 @@ Backend coverage for auth flows; UI-only flows are noted in docstrings.
 
 from __future__ import annotations
 
+import bootstrap_sys_path  # noqa: F401
+
 import pytest
 
 from backend.tests.helpers import auth_headers, login_form, register_verified_user
