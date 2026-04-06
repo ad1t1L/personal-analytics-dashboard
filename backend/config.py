@@ -41,6 +41,18 @@ FROM_EMAIL    = os.environ.get("FROM_EMAIL",    "no-reply@yourapp.com")
 
 APP_BASE_URL  = os.environ.get("APP_BASE_URL",  "http://localhost:8000")
 
+# ── Email sending ─────────────────────────────────────────────────────────────
+# Set DISABLE_SMTP_SENDING=1 to skip email entirely (accounts auto-verify).
+# Useful when SMTP is unavailable (e.g. Render free tier blocks port 587).
+_smtp_configured = bool(SMTP_USER and SMTP_PASSWORD)
+_disable_env = os.environ.get("DISABLE_SMTP_SENDING", "").strip().lower()
+if _disable_env in ("1", "true", "yes"):
+    DISABLE_SMTP_SENDING = True
+elif _disable_env in ("0", "false", "no"):
+    DISABLE_SMTP_SENDING = False
+else:
+    DISABLE_SMTP_SENDING = not _smtp_configured
+
 # ── Password rules ────────────────────────────────────────────────────────────
 MIN_PASSWORD_LENGTH = 8
 
