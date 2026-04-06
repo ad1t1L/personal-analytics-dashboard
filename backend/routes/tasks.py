@@ -15,7 +15,6 @@ POST /tasks/{id}/complete -- mark complete without full feedback flow
 
 from datetime import datetime, timezone
 from typing import Optional
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
@@ -146,6 +145,13 @@ class TaskPatch(BaseModel):
     deadline              : Optional[str]  = None
     importance            : Optional[int]  = None
 
+    @field_validator("importance")
+    @classmethod
+    def validate_importance(cls, v):
+        if v is not None and not (1 <= v <= 5):
+            raise ValueError("importance must be between 1 and 5")
+        return v
+
 
 # ── Serializer ────────────────────────────────────────────────────────────────
 
@@ -174,21 +180,6 @@ def serialize_task(task: Task) -> dict:
         "last_scheduled_date"  : task.last_scheduled_date,
         "created_at"           : task.created_at.isoformat() if task.created_at else None,
     }
-
-
-class TaskUpdate(BaseModel):
-    title:            Optional[str] = None
-    duration_minutes: Optional[int] = None
-    deadline:         Optional[str] = None
-    importance:       Optional[int] = None
-    task_type:        Optional[str] = None
-    fixed_start:      Optional[str] = None
-    fixed_end:        Optional[str] = None
-    location:         Optional[str] = None
-    energy_level:     Optional[str] = None
-    preferred_time:   Optional[str] = None
-    recurrence:       Optional[str] = None
-    recurrence_days:  Optional[str] = None
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
@@ -286,18 +277,6 @@ def create_task(
     return {"created": True, "task": serialize_task(task)}
 
 
-@router.patch("/{task_id}/partial")
-def update_task(
-    task_id:      int,
-    body:         TaskUpdate,
-    db:           Session = Depends(get_db),
-    current_user: User    = Depends(get_current_user),
-):
-    """
-    Partially update a task's fields (title, duration, deadline, importance).
-    Only updates fields that are explicitly provided in the request body.
-    IDOR-safe: checks user_id before allowing any modification.
-    """
 @router.put("/{task_id}")
 def update_task(
     task_id      : int,
@@ -338,6 +317,8 @@ def update_task(
         task.energy_level = body.energy_level
     if body.preferred_time is not None:
         task.preferred_time = body.preferred_time
+    if body.preferred_time_locked is not None:
+        task.preferred_time_locked = body.preferred_time_locked
     if body.recurrence is not None:
         task.recurrence = body.recurrence
     if body.recurrence_days is not None:

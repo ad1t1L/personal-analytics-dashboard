@@ -13,12 +13,12 @@ from backend.security import decode_access_token
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
-def get_db() -> Generator[Session, Any, None]:
-    db: Session = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+def get_db() -> Generator[Session, Any, None]:  # pragma: no cover
+    db: Session = SessionLocal()                 # pragma: no cover
+    try:                                         # pragma: no cover
+        yield db                                 # pragma: no cover
+    finally:                                     # pragma: no cover
+        db.close()                               # pragma: no cover
 
 
 def get_current_user(

@@ -132,7 +132,6 @@ def load_recent_daily_feedback(
     return (
         db.query(DailyFeedback)
         .filter(
-            DailyFeedback.user_id >= user_id,
             DailyFeedback.user_id == user_id,
             DailyFeedback.date   >= cutoff,
             DailyFeedback.date   <= date_str,

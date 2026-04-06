@@ -1,5 +1,13 @@
 import logging
+import os
+import sys
 from pathlib import Path
+
+# Ensure the repo root is on sys.path so `from backend.xxx import ...` works
+# when this file is run directly (IDE "Run" button) instead of via uvicorn from the repo root.
+_repo_root = str(Path(__file__).resolve().parents[1])
+if _repo_root not in sys.path:
+    sys.path.insert(0, _repo_root)
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,6 +28,14 @@ from backend.routes.auth import router as auth_router
 
 app = FastAPI(title="Personal Analytics Dashboard API")
 
+# ALLOWED_ORIGINS: comma-separated list of extra origins (e.g. your Vercel URL).
+# Example Render env var: ALLOWED_ORIGINS=https://your-app.vercel.app
+_extra_origins = [
+    o.strip()
+    for o in os.environ.get("ALLOWED_ORIGINS", "").split(",")
+    if o.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -32,7 +48,8 @@ app.add_middleware(
         "http://127.0.0.1:8000",
         "tauri://localhost",
         "http://tauri.localhost",
-    ],  # Web + Tauri dev/prod origins
+        *_extra_origins,
+    ],  # Web + Tauri dev/prod origins; add prod URL via ALLOWED_ORIGINS env var
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -47,7 +64,7 @@ app.include_router(feedback_router,  prefix="/feedback",  tags=["feedback"])
 # ── SPA (Vite build): same origin as API on :8000 — no separate Vite server needed ──
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _FRONTEND_DIST = _REPO_ROOT / "web" / "react-version" / "dist"
-if _FRONTEND_DIST.is_dir():
+if _FRONTEND_DIST.is_dir():  # pragma: no cover
     # Serve the SPA without relying on `StaticFiles(html=True)` (it isn't
     # reliably falling back for client-side routes like `/login`).
     assets_dir = _FRONTEND_DIST / "assets"

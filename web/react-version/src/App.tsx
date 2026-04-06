@@ -39,8 +39,8 @@ export default function App() {
           </Protected>
         }
       />
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
       <Route path="/account" element={<Account />} />
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
 }
