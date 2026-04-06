@@ -1,4 +1,5 @@
 import logging
+import os
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -20,6 +21,14 @@ from backend.routes.auth import router as auth_router
 
 app = FastAPI(title="Personal Analytics Dashboard API")
 
+# ALLOWED_ORIGINS: comma-separated list of extra origins (e.g. your Vercel URL).
+# Example Render env var: ALLOWED_ORIGINS=https://your-app.vercel.app
+_extra_origins = [
+    o.strip()
+    for o in os.environ.get("ALLOWED_ORIGINS", "").split(",")
+    if o.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -32,7 +41,8 @@ app.add_middleware(
         "http://127.0.0.1:8000",
         "tauri://localhost",
         "http://tauri.localhost",
-    ],  # Web + Tauri dev/prod origins
+        *_extra_origins,
+    ],  # Web + Tauri dev/prod origins; add prod URL via ALLOWED_ORIGINS env var
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
