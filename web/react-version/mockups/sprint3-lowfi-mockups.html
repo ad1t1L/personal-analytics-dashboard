@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sprint 3 Low-Fidelity Mockups</title>
+    <style>
+      :root {
+        --bg: #f3f5f9;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --card: #ffffff;
+        --line: #d8dee9;
+        --primary: #2563eb;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font-family: "Segoe UI", Arial, sans-serif;
+        margin: 28px;
+        line-height: 1.45;
+        background: var(--bg);
+        color: var(--text);
+      }
+      .page-wrap {
+        max-width: 1100px;
+        margin: 0 auto;
+      }
+      .screen {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--card);
+        margin: 0 0 84px;
+        overflow: hidden;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.05);
+      }
+      .screen-shot {
+        max-width: 920px;
+        margin: 0 auto;
+        border: 1px solid #cfd7e3;
+        border-radius: 12px;
+        background: #ffffff;
+        padding: 16px;
+      }
+      .shot-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #e1e7f0;
+        padding-bottom: 10px;
+        margin-bottom: 12px;
+      }
+      .shot-dot-row {
+        display: flex;
+        gap: 6px;
+      }
+      .shot-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #c6cfdd;
+      }
+      .screen-body {
+        padding: 18px;
+      }
+      .app-shell {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fcfdff;
+        padding: 16px;
+      }
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+      }
+      .brand {
+        font-weight: 800;
+      }
+      .muted {
+        color: var(--muted);
+        font-size: 0.88rem;
+      }
+      .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fff;
+        padding: 14px;
+      }
+      .card h3 {
+        margin: 0 0 10px;
+        font-size: 0.98rem;
+        font-weight: 700;
+      }
+      .btn {
+        border: 1px solid #b8c1d1;
+        border-radius: 8px;
+        background: #fff;
+        padding: 8px 12px;
+        font-size: 0.88rem;
+      }
+      .btn.primary {
+        background: var(--primary);
+        color: #fff;
+        border-color: var(--primary);
+      }
+      .row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .field {
+        margin-bottom: 10px;
+      }
+      label {
+        display: block;
+        margin: 0 0 6px;
+        font-size: 0.86rem;
+        color: #374151;
+      }
+      input {
+        width: 100%;
+        border: 1px solid #b8c1d1;
+        border-radius: 8px;
+        padding: 8px 10px;
+        background: #fff;
+      }
+      .list {
+        margin: 0;
+        padding-left: 18px;
+      }
+      .list li {
+        margin-bottom: 6px;
+      }
+      .mini-widget {
+        width: 280px;
+        border: 1px solid #cfd7e3;
+        border-radius: 12px;
+        background: #ffffff;
+        padding: 12px;
+      }
+      .widget-wrap {
+        display: grid;
+        place-items: center;
+        min-height: 260px;
+      }
+      .timeline-item {
+        display: flex;
+        justify-content: space-between;
+        border-bottom: 1px dashed #d7deea;
+        padding: 7px 0;
+        font-size: 0.88rem;
+      }
+      .timeline-item:last-child {
+        border-bottom: 0;
+      }
+      .chart-placeholder {
+        height: 130px;
+        border: 1px dashed #9aa8be;
+        border-radius: 10px;
+        display: grid;
+        place-items: center;
+        color: #6b7280;
+        font-size: 0.88rem;
+        background: #f9fbff;
+      }
+      .summary-row {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+      }
+      .pill {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 5px 10px;
+        font-size: 0.78rem;
+        color: #475569;
+        background: #f8fafc;
+      }
+      .capture-gap {
+        height: 48px;
+        border-top: 1px dashed #cfd7e3;
+        margin-top: 22px;
+      }
+      @media print {
+        .screen {
+          break-after: page;
+          margin-bottom: 0;
+          box-shadow: none;
+        }
+        .capture-gap {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page-wrap">
+      <section class="screen">
+        <div class="screen-body">
+          <div class="screen-shot">
+            <div class="shot-header">
+              <div class="shot-dot-row"><span class="shot-dot"></span><span class="shot-dot"></span><span class="shot-dot"></span></div>
+            </div>
+            <div class="app-shell">
+          <div class="header">
+            <div class="brand">PlannerHub</div>
+            <button class="btn">Login</button>
+          </div>
+          <div class="card" style="margin-bottom: 12px">
+            <h3>Plan better. Track smarter.</h3>
+            <p class="muted">A simple dashboard to manage tasks, schedules, and daily productivity patterns.</p>
+            <div class="row" style="margin-top: 8px">
+              <button class="btn primary">Get Started</button>
+              <button class="btn">Learn More</button>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="card">
+              <h3>About</h3>
+              <p class="muted">This app helps students and professionals organize work, view schedules, and reflect on daily activity.</p>
+            </div>
+            <div class="card">
+              <h3>Meet the Team</h3>
+              <ul class="list muted">
+                <li>Member 1 - Product</li>
+                <li>Member 2 - Frontend</li>
+                <li>Member 3 - Backend</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+          </div>
+          <div class="capture-gap"></div>
+      </div>
+    </section>
+
+    <section class="screen">
+      <div class="screen-body">
+        <div class="screen-shot">
+          <div class="shot-header">
+            <div class="shot-dot-row"><span class="shot-dot"></span><span class="shot-dot"></span><span class="shot-dot"></span></div>
+          </div>
+          <div class="app-shell">
+          <div class="header">
+            <div>
+              <div class="brand">Settings</div>
+              <div class="muted">Configure your day preferences</div>
+            </div>
+          </div>
+          <div class="card" style="max-width: 430px">
+            <h3>Day Schedule</h3>
+            <div class="field">
+              <label for="start-time">Start of Day</label>
+              <input id="start-time" type="time" value="08:00" />
+            </div>
+            <div class="field">
+              <label for="end-time">End of Day</label>
+              <input id="end-time" type="time" value="22:00" />
+            </div>
+            <div class="row">
+              <button class="btn primary">Save Changes</button>
+              <button class="btn">Cancel</button>
+            </div>
+          </div>
+        </div>
+        </div>
+        <div class="capture-gap"></div>
+      </div>
+    </section>
+
+    <section class="screen">
+      <div class="screen-body">
+        <div class="screen-shot">
+          <div class="shot-header">
+            <div class="shot-dot-row"><span class="shot-dot"></span><span class="shot-dot"></span><span class="shot-dot"></span></div>
+          </div>
+          <div class="app-shell">
+          <div class="header">
+            <div>
+              <div class="brand">Calendar Integration</div>
+              <div class="muted">Connect your calendar to import events</div>
+            </div>
+            <div class="row">
+              <button class="btn primary">Connect Calendar</button>
+              <button class="btn">Disconnect</button>
+            </div>
+          </div>
+          <div class="card">
+            <h3>Imported Events</h3>
+            <ul class="list">
+              <li><strong>9:00 AM</strong> - Class: Software Design</li>
+              <li><strong>1:00 PM</strong> - Project Team Meeting</li>
+              <li><strong>4:30 PM</strong> - Gym Session</li>
+            </ul>
+          </div>
+        </div>
+        </div>
+        <div class="capture-gap"></div>
+      </div>
+    </section>
+
+    <section class="screen">
+      <div class="screen-body">
+        <div class="screen-shot">
+          <div class="shot-header">
+            <div class="shot-dot-row"><span class="shot-dot"></span><span class="shot-dot"></span><span class="shot-dot"></span></div>
+          </div>
+          <div class="widget-wrap">
+            <div class="mini-widget">
+          <div class="header" style="margin-bottom: 8px">
+            <div class="brand" style="font-size: 0.95rem">Today&apos;s Plan</div>
+            <span class="pill">Widget</span>
+          </div>
+          <div class="timeline-item"><span>9:00 AM</span><span>Class</span></div>
+          <div class="timeline-item"><span>11:00 AM</span><span>Study Session</span></div>
+          <div class="timeline-item"><span>2:00 PM</span><span>Team Meeting</span></div>
+          <div class="timeline-item"><span>5:00 PM</span><span>Review Tasks</span></div>
+        </div>
+          </div>
+        </div>
+        <div class="capture-gap"></div>
+      </div>
+    </section>
+
+    <section class="screen">
+      <div class="screen-body">
+        <div class="screen-shot">
+          <div class="shot-header">
+            <div class="shot-dot-row"><span class="shot-dot"></span><span class="shot-dot"></span><span class="shot-dot"></span></div>
+          </div>
+          <div class="app-shell">
+          <div class="header">
+            <div>
+              <div class="brand">Analytics</div>
+              <div class="muted">Overview of your daily activity</div>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="card">
+              <h3>Category Breakdown</h3>
+              <div class="chart-placeholder">Chart Placeholder (Study / Work / Personal)</div>
+            </div>
+            <div class="card">
+              <h3>Daily Summary</h3>
+              <div class="summary-row" style="margin-bottom: 10px">
+                <div class="card">
+                  <div class="muted">Tasks Done</div>
+                  <strong>8</strong>
+                </div>
+                <div class="card">
+                  <div class="muted">Focus Time</div>
+                  <strong>4.5h</strong>
+                </div>
+                <div class="card">
+                  <div class="muted">Break Time</div>
+                  <strong>55m</strong>
+                </div>
+              </div>
+              <ul class="list muted">
+                <li>Most productive period: Morning</li>
+                <li>Top category today: Study</li>
+                <li>Recommended focus blocks tomorrow: 3</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        </div>
+        <div class="capture-gap"></div>
+      </div>
+    </section>
+    </div>
+  </body>
+</html>
