@@ -22,6 +22,15 @@ vi.mock("../pages/Account.tsx", () => ({
 vi.mock("../pages/TauriFloatingWidget.tsx", () => ({
   default: () => <div data-testid="widget-page">Widget</div>,
 }));
+vi.mock("../pages/Landing.tsx", () => ({
+  default: () => <div data-testid="landing-page">Landing Page</div>,
+}));
+vi.mock("../pages/About.tsx", () => ({
+  default: () => <div data-testid="about-page">About Page</div>,
+}));
+vi.mock("../pages/MeetTheTeam.tsx", () => ({
+  default: () => <div data-testid="team-page">Meet the Team Page</div>,
+}));
 
 function renderAt(path: string) {
   return render(
@@ -38,6 +47,21 @@ beforeEach(() => {
 // ── Route rendering ───────────────────────────────────────────────────────────
 
 describe("App routing", () => {
+  it("renders Landing page at /", () => {
+    renderAt("/");
+    expect(screen.getByTestId("landing-page")).toBeInTheDocument();
+  });
+
+  it("renders About page at /about", () => {
+    renderAt("/about");
+    expect(screen.getByTestId("about-page")).toBeInTheDocument();
+  });
+
+  it("renders Meet the Team page at /team", () => {
+    renderAt("/team");
+    expect(screen.getByTestId("team-page")).toBeInTheDocument();
+  });
+
   it("renders Login page at /login", () => {
     renderAt("/login");
     expect(screen.getByTestId("login-page")).toBeInTheDocument();
@@ -73,34 +97,24 @@ describe("App protected route", () => {
     expect(screen.getByTestId("dashboard-page")).toBeInTheDocument();
   });
 
-  it("renders Dashboard at / when access_token is present (via redirect)", () => {
+  it("renders Landing page at / even when authenticated", () => {
     sessionStorage.setItem("access_token", "mock_token");
     renderAt("/");
-    expect(screen.getByTestId("dashboard-page")).toBeInTheDocument();
-  });
-});
-
-// ── Root redirect ─────────────────────────────────────────────────────────────
-
-describe("App root redirect", () => {
-  it("redirects / to /login when no session", () => {
-    renderAt("/");
-    // / → /dashboard → protected → /login
-    expect(screen.getByTestId("login-page")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-page")).toBeInTheDocument();
   });
 });
 
 // ── Unknown routes ────────────────────────────────────────────────────────────
 
 describe("App unknown routes", () => {
-  it("redirects unknown paths to /dashboard (then /login if no token)", () => {
+  it("redirects unknown paths to Landing page", () => {
     renderAt("/totally/unknown/path");
-    expect(screen.getByTestId("login-page")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-page")).toBeInTheDocument();
   });
 
-  it("redirects unknown paths to Dashboard when authenticated", () => {
+  it("redirects unknown paths to Landing page when authenticated", () => {
     sessionStorage.setItem("access_token", "mock_token");
     renderAt("/unknown");
-    expect(screen.getByTestId("dashboard-page")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-page")).toBeInTheDocument();
   });
 });

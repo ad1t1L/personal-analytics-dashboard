@@ -2,7 +2,7 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-from backend.config import SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, FROM_EMAIL, APP_BASE_URL
+from backend.config import SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, FROM_EMAIL, APP_BASE_URL, DISABLE_SMTP_SENDING
 
 
 def _send(to: str, subject: str, html_body: str) -> None:
@@ -14,6 +14,10 @@ def _send(to: str, subject: str, html_body: str) -> None:
     Encrypts the connection between your server and the mail relay so that
     credentials and message content are not visible on the network.
     """
+    if DISABLE_SMTP_SENDING:
+        return
+    if not SMTP_USER or not SMTP_PASSWORD:
+        raise RuntimeError("SMTP is not configured")
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"]    = FROM_EMAIL

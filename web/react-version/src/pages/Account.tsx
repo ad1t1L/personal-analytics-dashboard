@@ -43,6 +43,13 @@ export default function Account() {
   const [showCurrentPw, setShowCurrentPw] = useState(false);
   const [showNewPw, setShowNewPw] = useState(false);
 
+  // Schedule preferences state
+  const [wakeTime, setWakeTime] = useState("07:00");
+  const [sleepTime, setSleepTime] = useState("23:00");
+  const [schedSaving, setSchedSaving] = useState(false);
+  const [schedMsg, setSchedMsg] = useState<string | null>(null);
+  const [schedErr, setSchedErr] = useState<string | null>(null);
+
   // 2FA state
   const [totpEnabled, setTotpEnabled] = useState<boolean | null>(null);
   const [email2FAEnabled, setEmail2FAEnabled] = useState<boolean | null>(null);
@@ -93,6 +100,21 @@ export default function Account() {
   }, []);
 
   useEffect(() => { if (session) fetch2FAStatus(); }, [session, fetch2FAStatus]);
+
+  useEffect(() => {
+    if (!session) return;
+    const token = sessionStorage.getItem("access_token");
+    if (!token) return;
+    fetch(`${API_BASE}/preferences`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data) {
+          setWakeTime(data.wake_time ?? "07:00");
+          setSleepTime(data.sleep_time ?? "23:00");
+        }
+      })
+      .catch(() => {});
+  }, [session]);
 
   async function signOut() {
     const refreshToken = sessionStorage.getItem("refresh_token");
@@ -160,6 +182,31 @@ export default function Account() {
       setPwErr("Could not connect to server.");
     } finally {
       setPwSaving(false);
+    }
+  }
+
+  async function saveSchedule(e: React.FormEvent) {
+    e.preventDefault();
+    setSchedErr(null); setSchedMsg(null);
+    if (wakeTime >= sleepTime) {
+      setSchedErr("Wake time must be earlier than sleep time.");
+      return;
+    }
+    setSchedSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/preferences`, {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ wake_time: wakeTime, sleep_time: sleepTime }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setSchedErr(data.detail || "Could not save."); return; }
+      setSchedMsg("Schedule saved ✅");
+      setTimeout(() => setSchedMsg(null), 2200);
+    } catch {
+      setSchedErr("Could not connect to server.");
+    } finally {
+      setSchedSaving(false);
     }
   }
 
@@ -260,6 +307,7 @@ export default function Account() {
           <div className="side-title">Account</div>
           <button className="side-pill" type="button">Profile</button>
           <button className="side-link" type="button" onClick={() => setShowChangePw(v => !v)}>Change password</button>
+          <button className="side-link" type="button" onClick={() => document.getElementById("schedule-panel")?.scrollIntoView({ behavior: "smooth" })}>Schedule</button>
           <button className="side-link side-link-danger" type="button" onClick={signOut}>Sign out</button>
         </aside>
 
@@ -521,6 +569,49 @@ export default function Account() {
                   </div>
                 </>
               )}
+            </section>
+          <section className="panel" id="schedule-panel" style={{ marginTop: 16 }}>
+              <div className="panel-head">
+                <div>
+                  <h2 className="panel-title" style={{ fontSize: "1.1rem" }}>Schedule Window</h2>
+                  <p className="panel-sub" style={{ marginTop: 4 }}>
+                    The scheduler will only place tasks within these hours. Fixed-time tasks you add manually are exempt.
+                  </p>
+                </div>
+              </div>
+
+              {schedErr && <div className="error" style={{ marginTop: 12 }}>{schedErr}</div>}
+              {schedMsg && <div className="success-notice" style={{ marginTop: 12 }}>{schedMsg}</div>}
+
+              <form onSubmit={saveSchedule} style={{ marginTop: 16 }}>
+                <div className="modal-row">
+                  <div className="modal-field">
+                    <label>Wake time</label>
+                    <input
+                      className="input"
+                      type="time"
+                      value={wakeTime}
+                      onChange={e => setWakeTime(e.target.value)}
+                      disabled={schedSaving}
+                    />
+                  </div>
+                  <div className="modal-field">
+                    <label>Sleep time</label>
+                    <input
+                      className="input"
+                      type="time"
+                      value={sleepTime}
+                      onChange={e => setSleepTime(e.target.value)}
+                      disabled={schedSaving}
+                    />
+                  </div>
+                </div>
+                <div style={{ marginTop: 12 }}>
+                  <button className="primary-btn" type="submit" disabled={schedSaving}>
+                    {schedSaving ? "Saving…" : "Save"}
+                  </button>
+                </div>
+              </form>
             </section>
           </div>
         </div>
