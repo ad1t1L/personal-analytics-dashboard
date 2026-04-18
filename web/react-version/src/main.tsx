@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import "./index.css";
 import "./login.css";
 import "./styles.css";
+import "./landing.css";
 import App from "./App.tsx";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

@@ -5,6 +5,9 @@ import ForgotPassword from "./pages/ForgotPassword.tsx";
 import ResetPassword from "./pages/ResetPassword.tsx";
 import Account from "./pages/Account.tsx";
 import TauriFloatingWidget from "./pages/TauriFloatingWidget.tsx";
+import Landing from "./pages/Landing.tsx";
+import About from "./pages/About.tsx";
+import MeetTheTeam from "./pages/MeetTheTeam.tsx";
 
 function isTauriWidgetUrl() {
   if (typeof window === "undefined") return false;
@@ -27,7 +30,9 @@ export default function App() {
 
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/" element={<Landing />} />
+      <Route path="/about" element={<About />} />
+      <Route path="/team" element={<MeetTheTeam />} />
       <Route path="/login" element={<Login />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
@@ -40,7 +45,7 @@ export default function App() {
         }
       />
       <Route path="/account" element={<Account />} />
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

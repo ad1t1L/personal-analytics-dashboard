@@ -162,7 +162,9 @@ fn try_build_widget_window(app: &tauri::AppHandle) -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
-        builder = builder.skip_taskbar(true);
+        builder = builder
+            .skip_taskbar(true)
+            .transparent(true);
     }
     #[cfg(target_os = "linux")]
     {
@@ -241,11 +243,15 @@ fn hide_widget(app: &tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn show_widget_window(app: tauri::AppHandle) -> Result<(), String> {
-    show_widget(&app)
+async fn show_widget_window(app: tauri::AppHandle) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || show_widget(&app))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn hide_widget_window(app: tauri::AppHandle) -> Result<(), String> {
-    hide_widget(&app)
+async fn hide_widget_window(app: tauri::AppHandle) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || hide_widget(&app))
+        .await
+        .map_err(|e| e.to_string())?
 }

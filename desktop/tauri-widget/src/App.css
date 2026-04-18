@@ -1311,3 +1311,117 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Today's Schedule panel ─────────────────────────────────────────────────── */
+
+.dashboard-wrap .schedule-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dashboard-wrap .schedule-block {
+  display: flex;
+  gap: 14px;
+  align-items: stretch;
+}
+
+.dashboard-wrap .schedule-time {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 44px;
+  padding-top: 2px;
+  flex-shrink: 0;
+}
+
+.dashboard-wrap .schedule-start {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-wrap .schedule-end {
+  font-size: 0.6875rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-wrap .schedule-bar {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent2);
+  border-radius: 8px;
+  padding: 10px 14px;
+  transition: var(--trans);
+}
+
+.dashboard-wrap .schedule-bar:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.dashboard-wrap .schedule-task-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.dashboard-wrap .schedule-task-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+
+.dashboard-wrap .schedule-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.dashboard-wrap .schedule-sep {
+  color: var(--border);
+}
+
+.dashboard-wrap .schedule-ml-badge {
+  background: rgba(108, 99, 255, 0.18);
+  color: var(--accent);
+  border: 1px solid rgba(108, 99, 255, 0.3);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.dashboard-wrap .schedule-overflow {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.dashboard-wrap .schedule-overflow-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 8px;
+}
+
+.dashboard-wrap .schedule-overflow-item {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  padding: 4px 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--border);
+  margin-bottom: 4px;
+}

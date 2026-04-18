@@ -16,6 +16,29 @@ type Task = {
   created_at: string;
 };
 
+type ScheduledItem = {
+  task_id: number;
+  title: string;
+  start_time: string;   // "HH:MM"
+  end_time: string;     // "HH:MM"
+  energy_level: string;
+  task_type: string;
+  time_of_day: string;
+  times_rescheduled: number;
+};
+
+type ScheduleResult = {
+  date: string;
+  scheduled: ScheduledItem[];
+  overflow: ScheduledItem[];
+  summary: {
+    total_tasks: number;
+    scheduled_count: number;
+    overflow_count: number;
+    total_hours: number;
+  };
+};
+
 function importanceLabel(n: number) {
   if (n >= 5) return "Very high";
   if (n === 4) return "High";
@@ -54,6 +77,9 @@ export default function DashboardView({ onSignOut }: Props) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+
+  const [schedule, setSchedule] = useState<ScheduleResult | null>(null);
+  const [scheduleLoading, setScheduleLoading] = useState(false);
 
   const [totpEnabled, setTotpEnabled] = useState<boolean | null>(null);
   const [email2FAEnabled, setEmail2FAEnabled] = useState<boolean | null>(null);
@@ -112,9 +138,31 @@ export default function DashboardView({ onSignOut }: Props) {
     }
   }, [onSignOut]);
 
+  const fetchSchedule = useCallback(async () => {
+    const t = sessionStorage.getItem("access_token");
+    if (!t) return;
+    setScheduleLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/schedules/today`, {
+        headers: { Authorization: `Bearer ${t}` },
+      });
+      if (res.ok) {
+        const data: ScheduleResult = await res.json();
+        setSchedule(data);
+      }
+    } catch {
+      // schedule is non-critical, fail silently
+    } finally {
+      setScheduleLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    if (session) fetchTasks();
-  }, [session, fetchTasks]);
+    if (session) {
+      fetchTasks();
+      fetchSchedule();
+    }
+  }, [session, fetchTasks, fetchSchedule]);
 
   const fetch2FAStatus = useCallback(async () => {
     const token = sessionStorage.getItem("access_token");
@@ -195,6 +243,7 @@ export default function DashboardView({ onSignOut }: Props) {
       setImportance(3);
       setShowAddModal(false);
       await fetchTasks();
+      await fetchSchedule();
       emit("tasks-updated").catch(() => {});
     } catch {
       setCreateErr("Failed to create task. Is the backend running?");
@@ -221,6 +270,7 @@ export default function DashboardView({ onSignOut }: Props) {
         setTasks(prev);
         setErr("Could not delete task.");
       } else {
+        fetchSchedule();
         emit("tasks-updated").catch(() => {});
       }
     } catch {
@@ -259,7 +309,26 @@ export default function DashboardView({ onSignOut }: Props) {
 
   function tasksForDay(day: number): Task[] {
     const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    return tasks.filter((t) => t.deadline === dateStr);
+    // Tasks explicitly due on this date
+    const byDeadline = tasks.filter((t) => t.deadline === dateStr);
+    // For today: also include flexible tasks the ML scheduled (no deadline, placed by scheduler)
+    const isToday =
+      calYear === today.getFullYear() &&
+      calMonth === today.getMonth() &&
+      day === today.getDate();
+    if (isToday && schedule) {
+      const scheduledIds = new Set(schedule.scheduled.map((s) => s.task_id));
+      const scheduledFlexible = tasks.filter(
+        (t) => !t.deadline && scheduledIds.has(t.id)
+      );
+      // Merge, deduplicate by id
+      const merged = [...byDeadline];
+      for (const t of scheduledFlexible) {
+        if (!merged.find((x: Task) => x.id === t.id)) merged.push(t);
+      }
+      return merged;
+    }
+    return byDeadline;
   }
 
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
@@ -479,6 +548,77 @@ export default function DashboardView({ onSignOut }: Props) {
                 </>
               )}
             </div>
+          </section>
+
+          <section className="panel schedule-panel">
+            <div className="panel-head">
+              <div>
+                <h1 className="panel-title">Today's Schedule</h1>
+                <p className="panel-sub">
+                  {schedule
+                    ? `${schedule.summary.scheduled_count} tasks scheduled · ${schedule.summary.total_hours}h planned`
+                    : "Generating your ML schedule…"}
+                </p>
+              </div>
+              <button className="ghost-btn" type="button" onClick={fetchSchedule}>
+                ↻ Refresh
+              </button>
+            </div>
+
+            {scheduleLoading && <div className="empty">Building schedule…</div>}
+
+            {!scheduleLoading && schedule && schedule.scheduled.length === 0 && (
+              <div className="empty">No tasks scheduled for today. Add some tasks to get started.</div>
+            )}
+
+            {!scheduleLoading && schedule && schedule.scheduled.length > 0 && (
+              <div className="schedule-timeline">
+                {schedule.scheduled.map((item) => {
+                  const task = tasks.find((t) => t.id === item.task_id);
+                  const imp = task?.importance ?? 3;
+                  return (
+                    <div key={item.task_id} className="schedule-block">
+                      <div className="schedule-time">
+                        <span className="schedule-start">{item.start_time}</span>
+                        <span className="schedule-end">{item.end_time}</span>
+                      </div>
+                      <div
+                        className="schedule-bar"
+                        style={{ borderLeftColor: importanceDot(imp) }}
+                      >
+                        <div className="schedule-task-title">{item.title}</div>
+                        <div className="schedule-task-meta">
+                          <span
+                            className="schedule-dot"
+                            style={{ background: importanceDot(imp) }}
+                          />
+                          {importanceLabel(imp)}
+                          <span className="schedule-sep">·</span>
+                          {item.energy_level} energy
+                          <span className="schedule-sep">·</span>
+                          {item.time_of_day}
+                          {item.task_type === "flexible" && (
+                            <span className="schedule-ml-badge">ML placed</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {schedule.overflow.length > 0 && (
+                  <div className="schedule-overflow">
+                    <div className="schedule-overflow-label">
+                      Didn't fit today ({schedule.overflow.length})
+                    </div>
+                    {schedule.overflow.map((item) => (
+                      <div key={item.task_id} className="schedule-overflow-item">
+                        {item.title}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </section>
 
           <section className="panel calendar-panel">

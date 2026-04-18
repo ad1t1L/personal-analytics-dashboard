@@ -11,6 +11,8 @@ import os
 # In-memory DB for tests; keep USE_SQLITE=1 so behavior matches local .env. config.py honors sqlite: URLs.
 os.environ["USE_SQLITE"] = "1"
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+# Skip real SMTP in tests so users are auto-verified and no network calls are made.
+os.environ["DISABLE_SMTP_SENDING"] = "1"
 
 import pytest
 from sqlalchemy import create_engine

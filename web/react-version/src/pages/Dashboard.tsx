@@ -880,7 +880,17 @@ export default function Dashboard() {
   const noDeadlineTasks = dedupeForList(filteredTasks.filter(t => !t.deadline && !t.completed));
   const completedTasks = dedupeForList(filteredTasks.filter(t => t.completed));
 
-  function tasksForDate(ds: string) { return tasks.filter(t => t.deadline === ds); }
+  function tasksForDate(ds: string, scheduleData?: ScheduleData | null) {
+    const byDeadline = tasks.filter(t => t.deadline === ds);
+    if (!scheduleData) return byDeadline;
+    const scheduledIds = new Set(scheduleData.scheduled.map(s => s.task_id));
+    const scheduledFlexible = tasks.filter(t => !t.deadline && !t.completed && scheduledIds.has(t.id));
+    const merged = [...byDeadline];
+    for (const t of scheduledFlexible) {
+      if (!merged.find((x: Task) => x.id === t.id)) merged.push(t);
+    }
+    return merged;
+  }
 
   function prevMonth() { if (calMonth === 0) { setCalYear(y => y - 1); setCalMonth(11); } else setCalMonth(m => m - 1); }
   function nextMonth() { if (calMonth === 11) { setCalYear(y => y + 1); setCalMonth(0); } else setCalMonth(m => m + 1); }
@@ -893,9 +903,11 @@ export default function Dashboard() {
   const agendaDays: { date: Date; dateStr: string; tasks: Task[] }[] = [];
   for (let i = 0; i < 60; i++) {
     const d = addDays(today, i); const ds = toDateStr(d);
-    const dt = tasks.filter(t => t.deadline === ds).sort((a, b) => b.importance - a.importance);
+    const schedData = ds === todayStr ? schedule : null;
+    const dt = tasksForDate(ds, schedData).filter(t => !t.completed).sort((a, b) => b.importance - a.importance);
     if (dt.length > 0) agendaDays.push({ date: d, dateStr: ds, tasks: dt });
   }
+
   const overdueAgenda = tasks.filter(t => t.deadline && t.deadline < todayStr && !t.completed).sort((a, b) => (a.deadline ?? "").localeCompare(b.deadline ?? ""));
 
   const daysInMonth = getDaysInMonth(calYear, calMonth);
@@ -950,7 +962,7 @@ export default function Dashboard() {
 
   function DayPopup() {
     if (!dayPopup) return null;
-    const dayTasks = tasksForDate(dayPopup);
+    const dayTasks = tasksForDate(dayPopup, dayPopupSchedule);
 
     const PX_PER_MIN = 1.2;
     const HOUR_HEIGHT = 60 * PX_PER_MIN;

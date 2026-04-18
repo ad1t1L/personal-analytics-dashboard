@@ -160,6 +160,16 @@ def build_schedule(
     if today_str is None:
         today_str = date.today().isoformat()
 
+    # If scheduling for today, don't place tasks in time slots that have already passed.
+    # For future dates, any time in the day is valid.
+    from datetime import datetime
+    now = datetime.now()
+    is_today = (today_str == now.date().isoformat())
+    if is_today:
+        now_min = now.hour * 60 + now.minute
+    else:
+        now_min = 0
+
     # ── Day boundaries ────────────────────────────────────────────────────────
     day_start_min  = hhmm_to_min(prefs.get("wake_time",  "07:00"))
     day_end_min    = hhmm_to_min(prefs.get("sleep_time", "23:00"))
@@ -197,7 +207,8 @@ def build_schedule(
     fixed_scheduled.sort(key=lambda t: t["start_min"])
 
     # ── Step 3: Find free time windows ────────────────────────────────────────
-    free_slots = find_free_slots(fixed_scheduled, day_start_min, day_end_min, buffer_minutes)
+    effective_start = max(day_start_min, now_min + 30)
+    free_slots = find_free_slots(fixed_scheduled, effective_start, day_end_min, buffer_minutes)
 
     # ── Step 4: Rank flexible/semi tasks ──────────────────────────────────────
     ranked_tasks = rank_tasks(flexible_raw, today_str, prefs)
